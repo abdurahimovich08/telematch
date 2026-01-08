@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Flame, MessageCircle, User, Loader2, X, Heart, Star, Send, Sparkles, MapPin, RefreshCw, Settings, ShieldCheck, Zap, ArrowRight, CheckCircle2, BadgeCheck, Share2, DollarSign, MoreHorizontal, Camera } from 'lucide-react';
+import { Flame, MessageCircle, User, Loader2, X, Heart, Star, Send, Sparkles, MapPin, RefreshCw, Settings, ShieldCheck, Zap, ArrowRight, CheckCircle2, BadgeCheck, Share2, DollarSign, MoreHorizontal, Camera, Bell } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UserProfile, ViewState, Match, Message, UserAccount } from './types';
 import { generateAIProfiles, getAIReply, generateSmartBio, getCityName } from './geminiService';
@@ -50,6 +50,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingBio, setIsGeneratingBio] = useState(false);
   const [showMatchSplash, setShowMatchSplash] = useState<UserProfile | null>(null);
+  const [matchNotification, setMatchNotification] = useState<UserProfile | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [bioExpanded, setBioExpanded] = useState(false);
@@ -136,6 +137,14 @@ const App: React.FC = () => {
     }
   };
 
+  const triggerMatchNotification = (profile: UserProfile) => {
+    setMatchNotification(profile);
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.notificationOccurred('success');
+    }
+    setTimeout(() => setMatchNotification(null), 5000);
+  };
+
   const handleSwipe = useCallback(async (direction: 'left' | 'right') => {
     const swipedProfile = profiles[0];
     if (!swipedProfile) return;
@@ -152,8 +161,14 @@ const App: React.FC = () => {
         messages: []
       };
       setMatches(prev => [newMatch, ...prev]);
-      setShowMatchSplash(swipedProfile);
-      tg?.HapticFeedback?.notificationOccurred('success');
+      
+      // Tinder kabi Discovery vaqtida Splash-ni ko'rsatamiz
+      if (view === 'discovery') {
+        setShowMatchSplash(swipedProfile);
+      } else {
+        // Agar boshqa sahifada bo'lsa, Notification chiqaramiz
+        triggerMatchNotification(swipedProfile);
+      }
     }
 
     setProfiles(prev => prev.slice(1));
@@ -161,7 +176,7 @@ const App: React.FC = () => {
       const more = await generateAIProfiles(5, user);
       setProfiles(prev => [...prev, ...more]);
     }
-  }, [profiles, tg, user]);
+  }, [profiles, tg, user, view]);
 
   const handleSendMessage = async () => {
     if (!chatMessage.trim() || !activeMatch) return;
@@ -596,6 +611,38 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-white">
+      {/* Match Notification Toast */}
+      <AnimatePresence>
+        {matchNotification && (
+          <motion.div
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            onClick={() => {
+              const currentMatch = matches.find(m => m.user.id === matchNotification.id);
+              if (currentMatch) setActiveMatch(currentMatch);
+              setMatchNotification(null);
+              setView('chat');
+            }}
+            className="fixed top-4 left-4 right-4 z-[110] bg-white rounded-3xl shadow-2xl p-4 flex items-center gap-4 border border-pink-100 cursor-pointer active:scale-95 transition-transform"
+          >
+            <div className="relative">
+              <img src={matchNotification.imageUrl} className="w-14 h-14 rounded-2xl object-cover shadow-lg" />
+              <div className="absolute -bottom-1 -right-1 bg-pink-500 p-1 rounded-full text-white ring-2 ring-white">
+                <Heart size={10} fill="currentColor" />
+              </div>
+            </div>
+            <div className="flex-1">
+              <div className="text-xs font-black text-pink-500 uppercase tracking-widest mb-0.5 flex items-center gap-1">
+                <Bell size={10} /> Yangi moslik!
+              </div>
+              <div className="text-sm font-black text-gray-900">{matchNotification.name} bilan bir-biringizga yoqdingiz!</div>
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Suhbatni boshlash uchun bosing</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {view !== 'intro' && view !== 'onboarding' && view !== 'chat' && view !== 'profile' && (
         <header className="px-6 py-5 flex justify-between items-center border-b bg-white z-40">
           <div className="flex items-center gap-2">
@@ -653,12 +700,17 @@ const App: React.FC = () => {
 
       <AnimatePresence>
         {showMatchSplash && (
-          <MatchSplash match={showMatchSplash} onClose={() => setShowMatchSplash(null)} onChat={() => {
-            const currentMatch = matches.find(m => m.user.id === showMatchSplash.id);
-            if (currentMatch) setActiveMatch(currentMatch);
-            setShowMatchSplash(null);
-            setView('chat');
-          }} />
+          <MatchSplash 
+            match={showMatchSplash} 
+            userImageUrl={user.imageUrl}
+            onClose={() => setShowMatchSplash(null)} 
+            onChat={() => {
+              const currentMatch = matches.find(m => m.user.id === showMatchSplash.id);
+              if (currentMatch) setActiveMatch(currentMatch);
+              setShowMatchSplash(null);
+              setView('chat');
+            }} 
+          />
         )}
       </AnimatePresence>
     </div>

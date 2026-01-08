@@ -1,71 +1,104 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Heart } from 'lucide-react';
+import { MessageSquare, Heart, X } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface MatchSplashProps {
   match: UserProfile;
+  userImageUrl: string;
   onClose: () => void;
   onChat: () => void;
 }
 
-const MatchSplash: React.FC<MatchSplashProps> = ({ match, onClose, onChat }) => {
+const MatchSplash: React.FC<MatchSplashProps> = ({ match, userImageUrl, onClose, onChat }) => {
   return (
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-8 text-white text-center"
+      className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-8 overflow-hidden"
     >
-      <motion.div
-        initial={{ scale: 0.5, rotate: -20 }}
-        animate={{ scale: 1, rotate: 0 }}
-        transition={{ type: "spring", damping: 10 }}
-        className="mb-12 relative"
-      >
-        <div className="text-5xl font-black mb-2 tracking-tighter">IT'S A MATCH!</div>
-        <div className="text-pink-500 font-medium">You and {match.name} liked each other</div>
-        <motion.div 
-          animate={{ scale: [1, 1.2, 1] }}
-          transition={{ repeat: Infinity, duration: 2 }}
-          className="absolute -top-10 -right-10 text-pink-500"
-        >
-          <Heart size={64} fill="currentColor" />
-        </motion.div>
-      </motion.div>
-
-      <div className="flex gap-4 mb-12">
-        <div className="relative">
-          <img 
-            src="https://picsum.photos/seed/user/200" 
-            className="w-32 h-32 rounded-full border-4 border-white object-cover" 
-            alt="You"
-          />
-        </div>
-        <div className="relative">
-          <img 
-            src={match.imageUrl} 
-            className="w-32 h-32 rounded-full border-4 border-white object-cover" 
-            alt={match.name}
-          />
-        </div>
+      {/* Background Glow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-pink-600/20 blur-[120px] rounded-full"></div>
       </div>
 
-      <div className="w-full space-y-4">
-        <button 
+      <button 
+        onClick={onClose}
+        className="absolute top-12 right-6 p-2 text-white/50 hover:text-white transition-colors"
+      >
+        <X size={32} />
+      </button>
+
+      <motion.div
+        initial={{ y: -50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2, type: "spring" }}
+        className="mb-16 relative"
+      >
+        <div className="text-6xl font-black text-white italic tracking-tighter drop-shadow-[0_0_15px_rgba(236,72,153,0.5)]">
+          It's a Match!
+        </div>
+        <div className="text-white/80 font-bold mt-2 text-lg uppercase tracking-widest text-center">
+          You and {match.name} liked each other
+        </div>
+      </motion.div>
+
+      <div className="flex justify-center items-center mb-16 relative w-full h-48">
+        <motion.div
+          initial={{ x: -100, opacity: 0, rotate: -15 }}
+          animate={{ x: 20, opacity: 1, rotate: -10 }}
+          transition={{ delay: 0.5, duration: 0.5, type: "spring" }}
+          className="relative z-10"
+        >
+          <div className="w-40 h-40 rounded-full border-[6px] border-white shadow-2xl overflow-hidden ring-4 ring-pink-500/30">
+            <img src={userImageUrl} className="w-full h-full object-cover" alt="You" />
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ x: 100, opacity: 0, rotate: 15 }}
+          animate={{ x: -20, opacity: 1, rotate: 10 }}
+          transition={{ delay: 0.5, duration: 0.5, type: "spring" }}
+          className="relative z-20"
+        >
+          <div className="w-40 h-40 rounded-full border-[6px] border-white shadow-2xl overflow-hidden ring-4 ring-pink-500/30">
+            <img src={match.imageUrl} className="w-full h-full object-cover" alt={match.name} />
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.8, type: "spring" }}
+          className="absolute z-30 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-3 rounded-full shadow-2xl"
+        >
+          <Heart size={32} className="text-pink-500 fill-pink-500" />
+        </motion.div>
+      </div>
+
+      <div className="w-full space-y-5 max-w-sm relative z-40">
+        <motion.button 
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 1 }}
           onClick={onChat}
-          className="w-full py-4 bg-pink-500 rounded-full font-bold text-lg flex items-center justify-center gap-2 active:scale-95 transition-transform"
+          className="w-full py-5 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-full font-black text-lg shadow-xl shadow-pink-500/20 active:scale-95 transition-all flex items-center justify-center gap-3"
         >
-          <MessageSquare size={20} />
-          Send a Message
-        </button>
-        <button 
+          <MessageSquare size={24} fill="white" />
+          Suhbat boshlash
+        </motion.button>
+        
+        <motion.button 
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 1.1 }}
           onClick={onClose}
-          className="w-full py-4 border border-white/20 rounded-full font-semibold hover:bg-white/10 active:scale-95 transition-transform"
+          className="w-full py-5 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-full font-black text-lg active:scale-95 transition-all uppercase tracking-widest"
         >
-          Keep Swiping
-        </button>
+          Keyingisi
+        </motion.button>
       </div>
     </motion.div>
   );
