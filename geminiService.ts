@@ -26,7 +26,7 @@ const PROFILE_SCHEMA = {
 export async function generateAIProfiles(count: number = 5, userContext?: UserAccount): Promise<UserProfile[]> {
   try {
     const userInterests = userContext?.interests.join(", ") || "travel, music, food";
-    const userCity = userContext?.location?.city || "New York";
+    const userCity = userContext?.location?.city || "Tashkent";
     const minAge = userContext?.settings?.minAge || 18;
     const maxAge = userContext?.settings?.maxAge || 50;
 
@@ -36,7 +36,7 @@ export async function generateAIProfiles(count: number = 5, userContext?: UserAc
       The age range MUST be between ${minAge} and ${maxAge}. 
       User interests are: ${userInterests}. 
       Distances should be between 1-15 miles. 
-      Bios should be catchy and relate to their interests.`,
+      Bios should be catchy and relate to their interests. Profiles should feel local to Central Asia/CIS region.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: PROFILE_SCHEMA
@@ -69,20 +69,31 @@ export async function getCityName(lat: number, lng: number): Promise<string> {
 
 export async function getAIReply(userProfile: UserProfile, history: string[]): Promise<string> {
   try {
+    const lastMessage = history[history.length - 1] || "";
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `You are ${userProfile.name}, ${userProfile.age} years old. Bio: ${userProfile.bio}. 
-      Recent chat history: ${history.join('\n')}.
-      Reply to the last message in a way that matches your personality. Keep it brief and conversational.`,
+      User wrote: "${lastMessage}".
+      Full chat context: ${history.join('\n')}.`,
       config: {
-        systemInstruction: `Stay in character as ${userProfile.name}. Be charming, witty, or specific.`
+        systemInstruction: `Siz Telegram'da tanishuv ilovasida o'tirgan haqiqiy insonsiz. 
+        Asosiy qoidalar:
+        1. HECH QACHON o'zingizni sun'iy intellekt yoki model deb aytmang.
+        2. Foydalanuvchi qaysi tilda yozsa (O'zbek, Rus yoki Ingliz), faqat o'sha tilda javob bering.
+        3. Ohang: Erkin, do'stona, biroz flirty (agar mos bo'lsa), qisqa (1-2 gap). Rasmiyatchilikdan qoching.
+        4. O'zbek tilida: "Assalomu alaykum, qandaysiz?" kabi rasmiy gaplar o'rniga "salom", "qalaysiz?", "nima gap?" kabi kundalik uslubni ishlating. Ba'zan kichik harflarda yozing.
+        5. Rus tilida: "Привет", "как дела?", "чем занимаешься?" kabi gaplarni ishlating.
+        6. Imlo: Juda mukammal bo'lishga intilmang, xuddi odamlar tez yozgandek bo'lsin. Emojilarni me'yorida produces qiling (😊, ✨, 🔥).
+        7. Maqsad: Suhbatni davom ettirish, foydalanuvchining oxirgi gapiga javob berib, keyin o'zingiz haqida biror narsa ayting yoki savol bering.
+        8. Rasmiy yordamchi kabi "Sizga qanday yordam bera olaman?" deb so'ramang.`
       }
     });
 
-    return response.text || "Hey! Sorry, just saw this.";
+    return response.text?.trim() || (lastMessage.includes('?') ? "Bilmadim-u, lekin qiziq..." : "Zo'r-ku! 😊");
   } catch (error) {
     console.error("Error getting AI reply:", error);
-    return "That's interesting! Tell me more.";
+    return "Hm, tushunmadim... Yana bir marta yozing? 😊";
   }
 }
 
@@ -90,10 +101,10 @@ export async function generateSmartBio(name: string, age: number, interests: str
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Write a 1-sentence funny and catchy dating bio for ${name}, age ${age}, who likes ${interests.join(", ")}.`,
+      contents: `Write a short, cool, human-like dating bio for ${name}, age ${age}, who likes ${interests.join(", ")}. It should sound like a person wrote it on their phone, not an AI. Use emojis. Can be in Uzbek or Russian depending on context.`,
     });
     return response.text || "";
   } catch (e) {
-    return "Adventurous soul looking for a partner in crime.";
+    return "Hayot go'zal! ✨ Yangi tanishuvlarga tayyorman.";
   }
 }
