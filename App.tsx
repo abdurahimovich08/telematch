@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Flame, MessageCircle, User, Loader2, X, Heart, Send, Sparkles, MapPin, RefreshCw, Settings, ArrowRight, BadgeCheck, Camera, ExternalLink, Bell, ShieldCheck, Gift, Search, Pencil } from 'lucide-react';
+import { Flame, MessageCircle, User, Loader2, X, Heart, Send, Sparkles, MapPin, RefreshCw, Settings, ArrowRight, BadgeCheck, Camera, ExternalLink, Bell, ShieldCheck, Gift, Search, Pencil, ChevronRight } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UserProfile, ViewState, Match, Message, UserAccount } from './types';
 import { generateAIProfiles, getAIReply, generateSmartBio, getCityName } from './geminiService';
@@ -111,64 +111,119 @@ const App: React.FC = () => {
   };
 
   const renderIntro = () => (
-    <div className="flex-1 flex flex-col bg-[#0a0a0a] relative grid-bg overflow-hidden px-8 pb-12 pt-20">
-      {/* Connexa Logo Simulation */}
-      <div className="absolute top-12 left-0 right-0 text-center">
-        <span className="text-white/80 font-extrabold text-xl tracking-wide uppercase">Connexa</span>
+    <div className="flex-1 flex flex-col bg-[#0a0a0a] relative grid-bg overflow-hidden px-8 pb-10 pt-16">
+      {/* Design Color Constants */}
+      <style>{`
+        :root {
+          --design-orange: #ff541c;
+          --design-purple: #7b2ff7;
+          --design-blue: #3b82f6;
+          --design-dark: #222222;
+        }
+      `}</style>
+
+      {/* Connexa Logo */}
+      <div className="absolute top-14 left-0 right-0 text-center z-50">
+        <span className="text-white font-[800] text-xl tracking-tight">Connexa</span>
       </div>
 
-      {/* Stacked Cards Illustration */}
-      <div className="flex-1 relative flex items-center justify-center">
-        <div className="relative w-full h-[400px]">
-          {/* Card 1 */}
+      {/* Stacked Cards Section */}
+      <div className="flex-1 relative flex flex-col items-center justify-center mt-4">
+        <div className="relative w-full aspect-[4/5] flex items-center justify-center">
+          
+          {/* Back Card (Jastin) */}
           <motion.div 
-            initial={{ rotate: -12, x: -40, opacity: 0 }}
-            animate={{ rotate: -12, x: -40, opacity: 1 }}
-            className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-64 rounded-3xl overflow-hidden shadow-2xl border border-white/10"
+            initial={{ rotate: -8, x: -45, y: -20, opacity: 0 }}
+            animate={{ rotate: -8, x: -45, y: -20, opacity: 1 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="absolute w-[210px] h-[280px] rounded-[32px] overflow-hidden shadow-2xl border border-white/10"
           >
-            <img src="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400" className="w-full h-full object-cover grayscale-[0.2]" />
-            <div className="absolute bottom-4 left-4 text-white text-[10px] font-black uppercase">Jastin, 24</div>
-            <div className="absolute top-4 left-4 w-6 h-6 bg-purple-600 rounded-lg flex items-center justify-center"><Gift size={12} className="text-white" /></div>
+            <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400" className="w-full h-full object-cover grayscale-[0.1]" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+            <div className="absolute bottom-6 left-6 text-white text-[12px]">
+              <div className="font-[800]">Jastin, 24</div>
+              <div className="text-[10px] opacity-60">New York</div>
+            </div>
+            
+            {/* Gift Icon Overlay */}
+            <motion.div 
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.4, type: "spring" }}
+              className="absolute top-1/2 -left-5 -translate-y-1/2 w-10 h-10 bg-[var(--design-purple)] rounded-2xl flex items-center justify-center shadow-lg"
+            >
+              <Gift size={20} className="text-white" />
+            </motion.div>
           </motion.div>
           
-          {/* Card 2 (Active looking) */}
+          {/* Front Card (Julia) */}
           <motion.div 
-            initial={{ rotate: 12, x: 40, opacity: 0 }}
-            animate={{ rotate: 12, x: 40, opacity: 1 }}
-            className="absolute top-10 left-1/2 -translate-x-1/2 w-48 h-64 rounded-3xl overflow-hidden shadow-2xl border border-white/20 z-10"
+            initial={{ rotate: 8, x: 40, y: 15, opacity: 0 }}
+            animate={{ rotate: 8, x: 40, y: 15, opacity: 1 }}
+            transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
+            className="absolute w-[210px] h-[280px] rounded-[32px] overflow-hidden shadow-2xl border border-white/20 z-10"
           >
             <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400" className="w-full h-full object-cover" />
-            <div className="absolute bottom-4 left-4 text-white text-[10px] font-black uppercase">Julia, 27</div>
-            <div className="absolute top-4 left-4 w-6 h-6 bg-blue-500 rounded-lg flex items-center justify-center"><MessageCircle size={12} className="text-white" fill="currentColor" /></div>
-            <div className="absolute top-1/2 right-4 -translate-y-1/2 w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-lg"><Heart size={20} className="text-white" fill="currentColor" /></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+            <div className="absolute bottom-6 left-6 text-white text-[12px]">
+              <div className="font-[800]">Julia Lode, 27</div>
+              <div className="text-[10px] opacity-60">Los Angeles</div>
+            </div>
+
+            {/* Message Icon Overlay */}
+            <motion.div 
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.5, type: "spring" }}
+              className="absolute -top-4 right-8 w-11 h-11 bg-[var(--design-blue)] rounded-2xl flex items-center justify-center shadow-lg"
+            >
+              <Send size={20} className="text-white" fill="white" />
+            </motion.div>
+
+            {/* Heart Icon Overlay */}
+            <motion.div 
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.6, type: "spring" }}
+              className="absolute bottom-1/4 -right-6 w-14 h-14 bg-[var(--design-orange)] rounded-full flex items-center justify-center shadow-2xl border-4 border-[#0a0a0a]"
+            >
+              <Heart size={26} className="text-white" fill="white" />
+            </motion.div>
           </motion.div>
+
         </div>
       </div>
 
-      {/* Text Section */}
-      <div className="text-center mt-4">
-        <h1 className="text-[44px] font-extrabold leading-[1.1] tracking-tight mb-4">
+      {/* Main Hero Text */}
+      <div className="text-center mt-2 mb-6">
+        <h1 className="text-[44px] font-[900] leading-[1.05] tracking-tight text-white mb-6">
           Find Your <br />
-          <span className="text-[#ff5200]">Perfect</span> Match
+          <span className="text-[var(--design-orange)]">Perfect</span> Match
         </h1>
-        <p className="text-gray-500 text-sm font-medium px-4">
+        <p className="text-white/40 text-[14px] leading-relaxed font-medium">
           Meet New People, Spark Real Connections, <br /> And See Where It Goes.
         </p>
       </div>
 
-      {/* Button Section */}
-      <div className="mt-12">
+      {/* Custom design Get Started Button */}
+      <div className="mt-auto pt-4">
         <button 
           onClick={() => setView('onboarding')} 
-          className="w-full h-16 bg-white/5 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-between px-6 active:scale-95 transition-all group"
+          className="w-full h-[84px] bg-[#222222] rounded-full flex items-center justify-between p-2.5 active:scale-[0.97] transition-all group"
         >
-          <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,82,0,0.4)]">
-             <Heart size={20} className="text-white" fill="currentColor" />
+          {/* Left Heart Circle */}
+          <div className="w-[64px] h-[64px] bg-[var(--design-orange)] rounded-full flex items-center justify-center shadow-lg shadow-orange-900/40">
+            <Heart size={24} className="text-white" fill="white" />
           </div>
-          <span className="text-white font-bold text-lg">Get Started</span>
-          <div className="flex gap-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
-            <ArrowRight size={20} />
-            <ArrowRight size={20} className="-ml-3" />
+          
+          {/* Center Text */}
+          <span className="text-white font-[800] text-lg tracking-tight ml-4">Get Started</span>
+          
+          {/* Right Arrows */}
+          <div className="flex items-center gap-0 px-4">
+            <ChevronRight size={22} className="text-white/20 -mr-3" strokeWidth={3} />
+            <ChevronRight size={22} className="text-white/40 -mr-3" strokeWidth={3} />
+            <ChevronRight size={22} className="text-white/80" strokeWidth={3} />
           </div>
         </button>
       </div>
