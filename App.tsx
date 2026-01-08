@@ -15,34 +15,42 @@ declare global {
 
 const App: React.FC = () => {
   const tg = window.Telegram?.WebApp;
+  const tgUser = tg?.initDataUnsafe?.user;
   
+  // Telegram User ID orqali Storage key yaratish
+  const STORAGE_KEY_USER = tgUser ? `telematch_user_${tgUser.id}` : 'telematch_user_guest';
+  const STORAGE_KEY_MATCHES = tgUser ? `telematch_matches_${tgUser.id}` : 'telematch_matches_guest';
+
   const [view, setView] = useState<ViewState>('intro');
   const [introStep, setIntroStep] = useState(0);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [matches, setMatches] = useState<Match[]>(() => {
-    const saved = localStorage.getItem('telematch_matches');
+    const saved = localStorage.getItem(STORAGE_KEY_MATCHES);
     return saved ? JSON.parse(saved) : [];
   });
   
   const [user, setUser] = useState<UserAccount>(() => {
-    const saved = localStorage.getItem('telematch_user');
+    const saved = localStorage.getItem(STORAGE_KEY_USER);
     if (saved) return JSON.parse(saved);
     
     return {
-      name: '',
+      id: tgUser?.id?.toString() || 'guest',
+      name: tgUser?.first_name || '',
       age: 21,
       bio: '',
       imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop',
       coverImageUrl: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&auto=format&fit=crop',
       interests: [],
       isVerified: true,
+      isPremium: tgUser?.is_premium || false,
       settings: {
         minAge: 18,
         maxAge: 35,
         distanceLimit: 25,
         discoveryActive: true
       },
-      onboarded: false
+      onboarded: false,
+      lastActive: Date.now()
     };
   });
 
@@ -60,26 +68,18 @@ const App: React.FC = () => {
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('telematch_matches', JSON.stringify(matches));
-  }, [matches]);
+    localStorage.setItem(STORAGE_KEY_MATCHES, JSON.stringify(matches));
+  }, [matches, STORAGE_KEY_MATCHES]);
 
   useEffect(() => {
-    localStorage.setItem('telematch_user', JSON.stringify(user));
-  }, [user]);
+    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify({ ...user, lastActive: Date.now() }));
+  }, [user, STORAGE_KEY_USER]);
 
   useEffect(() => {
     if (tg) {
       tg.ready();
       tg.expand();
       document.body.style.backgroundColor = tg.backgroundColor || '#ffffff';
-      
-      if (!user.onboarded && tg.initDataUnsafe?.user) {
-        const tgUser = tg.initDataUnsafe.user;
-        setUser(prev => ({
-          ...prev,
-          name: tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : ''),
-        }));
-      }
     }
 
     if (user.onboarded) {
@@ -88,7 +88,52 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Fix: Added missing image change handler
+  // SARALASH ALGORITMI (Recommendation Engine)
+  const scoreProfile = useCallback((profile: UserProfile): number => {
+    let score = 0;
+
+    // 1. Ustuvorlik: Real foydalanuvchilar har doim tepada
+    if (profile.type === 'real') score += 5000;
+
+    // 2. Masofa: Yaqinroq bo'lsa shuncha yaxshi
+    if (profile.distanceKm !== undefined) {
+      score += Math.max(0, 1000 - profile.distanceKm * 20);
+    }
+
+    // 3. Qiziqishlar: O'xshash qiziqishlar soni
+    const sharedInterests = profile.interests.filter(i => user.interests.includes(i));
+    score += sharedInterests.length * 200;
+
+    // 4. Faollik: Yaqinda kirganlar
+    const hoursSinceActive = (Date.now() - profile.lastSeen) / (1000 * 60 * 60);
+    if (hoursSinceActive < 24) score += 300;
+
+    // 5. Account holati
+    if (profile.isVerified) score += 150;
+    if (profile.isPremium) score += 200;
+
+    // 6. Yosh filtri (Bonus ball)
+    if (profile.age >= user.settings.minAge && profile.age <= user.settings.maxAge) {
+      score += 400;
+    }
+
+    return score;
+  }, [user]);
+
+  const loadInitialProfiles = async () => {
+    setIsLoading(true);
+    // Real ilovada bu yerda API orqali bazadan profillar olinadi
+    const rawProfiles = await generateAIProfiles(12, user);
+    
+    // Profillarni ballari bo'yicha saralash
+    const scoredProfiles = rawProfiles
+      .map(p => ({ ...p, score: scoreProfile(p) }))
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    setProfiles(scoredProfiles);
+    setIsLoading(false);
+  };
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
     const file = e.target.files?.[0];
     if (file) {
@@ -104,75 +149,31 @@ const App: React.FC = () => {
     }
   };
 
-  // Fix: Added missing AI bio generation handler
   const handleGenerateBio = async () => {
-    if (!user.name || user.interests.length === 0) {
-      if (tg?.showAlert) {
-        tg.showAlert("Iltimos, avval ismingiz va qiziqishlaringizni kiriting.");
-      } else {
-        alert("Iltimos, avval ismingiz va qiziqishlaringizni kiriting.");
-      }
-      return;
-    }
+    if (!user.name || user.interests.length === 0) return;
     setIsGeneratingBio(true);
     try {
       const bio = await generateSmartBio(user.name, user.age, user.interests);
       setUser(prev => ({ ...prev, bio }));
-    } catch (err) {
-      console.error("Bio generation failed", err);
     } finally {
       setIsGeneratingBio(false);
     }
   };
 
-  // Fix: Added missing location request handler
   const handleLocationRequest = () => {
-    if (!navigator.geolocation) {
-      if (tg?.showAlert) {
-        tg.showAlert("Joylashuvni aniqlash brauzeringizda qo'llab-quvvatlanmaydi.");
-      } else {
-        alert("Joylashuvni aniqlash brauzeringizda qo'llab-quvvatlanmaydi.");
-      }
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      const { latitude, longitude } = position.coords;
-      try {
-        const city = await getCityName(latitude, longitude);
-        setUser(prev => ({
-          ...prev,
-          location: { lat: latitude, lng: longitude, city }
-        }));
-      } catch (err) {
-        console.error("Failed to get city name", err);
-      }
-    }, (error) => {
-      console.error("Error getting location:", error);
-      if (tg?.showAlert) {
-        tg.showAlert("Joylashuvni aniqlashda xatolik yuz berdi.");
-      } else {
-        alert("Joylashuvni aniqlashda xatolik yuz berdi.");
-      }
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const city = await getCityName(latitude, longitude);
+      setUser(prev => ({ ...prev, location: { lat: latitude, lng: longitude, city } }));
     });
   };
 
-  const loadInitialProfiles = async () => {
-    setIsLoading(true);
-    const newProfiles = await generateAIProfiles(8, user);
-    setProfiles(newProfiles);
-    setIsLoading(false);
-  };
-
   const triggerAIInitiation = async (matchId: string, profile: UserProfile) => {
-    // 2-3 soniya kutamiz, "tabiiy" bo'lishi uchun
     setTimeout(async () => {
       const firstReply = await getAIReply(profile, []);
       const aiMsg: Message = { id: Date.now().toString(), senderId: profile.id, text: firstReply, timestamp: Date.now() };
-      
       setMatches(prev => prev.map(m => m.id === matchId ? { ...m, messages: [aiMsg], lastMessage: firstReply } : m));
-      
-      // Agar foydalanuvchi hozir o'sha chatda bo'lsa, yangilaymiz
       setActiveMatch(current => current?.id === matchId ? { ...current, messages: [aiMsg], lastMessage: firstReply } : current);
     }, 2500);
   };
@@ -199,20 +200,21 @@ const App: React.FC = () => {
         setShowMatchSplash(swipedProfile);
       } else {
         setMatchNotification(swipedProfile);
-        if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
         setTimeout(() => setMatchNotification(null), 5000);
       }
 
-      // AI birinchi bo'lib yozishini boshlaymiz
-      triggerAIInitiation(matchId, swipedProfile);
+      if (swipedProfile.type === 'ai') {
+        triggerAIInitiation(matchId, swipedProfile);
+      }
     }
 
     setProfiles(prev => prev.slice(1));
-    if (profiles.length < 3) {
-      const more = await generateAIProfiles(5, user);
-      setProfiles(prev => [...prev, ...more]);
+    if (profiles.length < 4) {
+      const more = await generateAIProfiles(8, user);
+      const scoredMore = more.map(p => ({ ...p, score: scoreProfile(p) }));
+      setProfiles(prev => [...prev, ...scoredMore].sort((a, b) => (b.score || 0) - (a.score || 0)));
     }
-  }, [profiles, tg, user, view]);
+  }, [profiles, tg, user, view, scoreProfile]);
 
   const handleSendMessage = async () => {
     if (!chatMessage.trim() || !activeMatch) return;
@@ -224,14 +226,14 @@ const App: React.FC = () => {
     setActiveMatch(updatedMatch);
     setChatMessage('');
 
-    const history = updatedMatch.messages.map(m => `${m.senderId === 'user' ? 'User' : m.senderId}: ${m.text}`);
-    const replyText = await getAIReply(activeMatch.user, history);
-    
-    const aiMsg: Message = { id: (Date.now() + 1).toString(), senderId: activeMatch.user.id, text: replyText, timestamp: Date.now() };
-    const finalMatch = { ...updatedMatch, messages: [...updatedMatch.messages, aiMsg], lastMessage: replyText };
-
-    setMatches(prev => prev.map(m => m.id === activeMatch.id ? finalMatch : m));
-    setActiveMatch(finalMatch);
+    if (activeMatch.user.type === 'ai') {
+      const history = updatedMatch.messages.map(m => `${m.senderId === 'user' ? 'User' : m.senderId}: ${m.text}`);
+      const replyText = await getAIReply(activeMatch.user, history);
+      const aiMsg: Message = { id: (Date.now() + 1).toString(), senderId: activeMatch.user.id, text: replyText, timestamp: Date.now() };
+      const finalMatch = { ...updatedMatch, messages: [...updatedMatch.messages, aiMsg], lastMessage: replyText };
+      setMatches(prev => prev.map(m => m.id === activeMatch.id ? finalMatch : m));
+      setActiveMatch(finalMatch);
+    }
   };
 
   useEffect(() => {
@@ -249,27 +251,19 @@ const App: React.FC = () => {
       },
       {
         icon: <div className="w-24 h-24 bg-pink-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-pink-200"><Sparkles size={48} /></div>,
-        title: "AI Yordamchi",
-        desc: "Gemini AI sizga mos keladigan eng yaxshi profillarni topib beradi."
+        title: "Smart Matching",
+        desc: "AI sizning qiziqishlaringiz va joylashuvingiz bo'yicha eng yaxshilarni saralaydi."
       },
       {
         icon: <div className="w-24 h-24 bg-green-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-green-200"><ShieldCheck size={48} /></div>,
-        title: "Xavfsiz va Maxfiy",
-        desc: "Telegram profilingiz bilan to'liq himoyalangan va xavfsiz suhbatlar."
-      },
-      {
-        icon: <div className="w-24 h-24 bg-gray-900 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-gray-400"><Heart size={48} fill="currentColor" /></div>,
-        title: "Tayyormisiz?",
-        desc: "O'zingizga mos juftlikni topish uchun atigi bir necha qadam qoldi."
+        title: "Real User Priority",
+        desc: "Biz haqiqiy foydalanuvchilarni tavsiyalarning eng yuqorisida ko'rsatamiz."
       }
     ];
 
     const nextSlide = () => {
-      if (introStep < slides.length - 1) {
-        setIntroStep(prev => prev + 1);
-      } else {
-        setView('onboarding');
-      }
+      if (introStep < slides.length - 1) setIntroStep(prev => prev + 1);
+      else setView('onboarding');
     };
 
     return (
@@ -281,7 +275,6 @@ const App: React.FC = () => {
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -50 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
               className="absolute inset-0 flex flex-col items-center justify-center p-10 text-center"
             >
               <div className="mb-8">{slides[introStep].icon}</div>
@@ -290,33 +283,15 @@ const App: React.FC = () => {
             </motion.div>
           </AnimatePresence>
         </div>
-
         <div className="p-10 flex flex-col items-center gap-8">
           <div className="flex gap-2">
             {slides.map((_, i) => (
-              <div 
-                key={i} 
-                className={`h-1.5 rounded-full transition-all duration-300 ${i === introStep ? 'w-8 bg-blue-500' : 'w-2 bg-gray-200'}`}
-              />
+              <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === introStep ? 'w-8 bg-blue-500' : 'w-2 bg-gray-200'}`}/>
             ))}
           </div>
-
-          <button 
-            onClick={nextSlide}
-            className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
-          >
-            {introStep === slides.length - 1 ? "Boshlash" : "Keyingisi"}
-            <ArrowRight size={20} />
+          <button onClick={nextSlide} className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
+            Keyingisi <ArrowRight size={20} />
           </button>
-          
-          {introStep < slides.length - 1 && (
-            <button 
-              onClick={() => setView('onboarding')}
-              className="text-gray-400 font-bold text-sm uppercase tracking-widest"
-            >
-              O'tkazib yuborish
-            </button>
-          )}
         </div>
       </div>
     );
@@ -325,96 +300,44 @@ const App: React.FC = () => {
   const renderOnboarding = () => (
     <div className="flex-1 flex flex-col p-6 bg-white overflow-y-auto">
       <div className="mt-4 mb-8 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest mb-4">
-          <CheckCircle2 size={12} /> Profilni sozlash
-        </div>
-        <h1 className="text-3xl font-black text-gray-900 tracking-tight">O'zingiz haqingizda</h1>
-        <p className="text-gray-500 mt-1 font-medium text-sm">Boshqalar sizni yaxshiroq tanishi uchun</p>
+        <h1 className="text-3xl font-black text-gray-900 tracking-tight">Profilingizni yarating</h1>
+        <p className="text-gray-500 mt-1 font-medium text-sm">Sizning Telegram ID'ingiz orqali profilingiz saqlanadi</p>
       </div>
-
       <div className="space-y-6 pb-10">
         <div className="flex flex-col items-center gap-4">
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avatar & Cover</div>
-            
-            {/* Hidden Inputs */}
-            <input 
-              type="file" 
-              accept="image/*" 
-              ref={avatarInputRef} 
-              className="hidden" 
-              onChange={(e) => handleImageChange(e, 'avatar')} 
-            />
-            <input 
-              type="file" 
-              accept="image/*" 
-              ref={coverInputRef} 
-              className="hidden" 
-              onChange={(e) => handleImageChange(e, 'cover')} 
-            />
-
+            <input type="file" accept="image/*" ref={avatarInputRef} className="hidden" onChange={(e) => handleImageChange(e, 'avatar')} />
+            <input type="file" accept="image/*" ref={coverInputRef} className="hidden" onChange={(e) => handleImageChange(e, 'cover')} />
             <div className="relative w-full h-40 rounded-3xl bg-gray-100 overflow-hidden border-2 border-dashed border-gray-200 group">
                 <img src={user.coverImageUrl} className="w-full h-full object-cover opacity-60" />
-                <div 
-                  onClick={() => coverInputRef.current?.click()}
-                  className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 text-[10px] font-black uppercase tracking-widest cursor-pointer bg-black/5 hover:bg-black/10 transition-colors"
-                >
+                <div onClick={() => coverInputRef.current?.click()} className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 text-[10px] font-black uppercase tracking-widest cursor-pointer bg-black/5 hover:bg-black/10 transition-colors">
                   <Camera size={24} className="mb-2" />
-                  Orqa fonni tanlash
+                  Orqa fon
                 </div>
                 <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-28 h-28 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-white">
                     <img src={user.imageUrl} className="w-full h-full object-cover" />
-                    <div 
-                      onClick={(e) => { e.stopPropagation(); avatarInputRef.current?.click(); }}
-                      className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-white cursor-pointer"
-                    >
+                    <div onClick={(e) => { e.stopPropagation(); avatarInputRef.current?.click(); }} className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-white cursor-pointer">
                       <Camera size={20} />
                     </div>
                 </div>
             </div>
-            <div className="mt-12 flex gap-4">
-              <button 
-                onClick={() => avatarInputRef.current?.click()}
-                className="text-xs font-bold text-blue-500 cursor-pointer flex items-center gap-1"
-              >
-                Avatar
-              </button>
-              <span className="text-gray-300">|</span>
-              <button 
-                onClick={() => coverInputRef.current?.click()}
-                className="text-xs font-bold text-blue-500 cursor-pointer flex items-center gap-1"
-              >
-                Cover
-              </button>
+            <div className="mt-12 flex gap-4 text-xs font-bold text-blue-500">
+              <button onClick={() => avatarInputRef.current?.click()}>Avatar tahrirlash</button>
+              <span>|</span>
+              <button onClick={() => coverInputRef.current?.click()}>Fon tahrirlash</button>
             </div>
         </div>
-
         <div>
           <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">To'liq ism</label>
-          <input 
-            type="text"
-            value={user.name}
-            onChange={e => setUser(prev => ({ ...prev, name: e.target.value }))}
-            className="w-full px-5 py-4 bg-gray-50 rounded-2xl text-gray-900 font-bold border border-gray-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
-            placeholder="Ismingizni yozing..."
-          />
+          <input type="text" value={user.name} onChange={e => setUser(prev => ({ ...prev, name: e.target.value }))} className="w-full px-5 py-4 bg-gray-50 rounded-2xl text-gray-900 font-bold border border-gray-100 focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Ismingiz..." />
         </div>
-
         <div className="flex gap-4">
           <div className="w-24">
             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Yosh</label>
-            <input 
-              type="number" 
-              value={user.age}
-              onChange={e => setUser(prev => ({ ...prev, age: parseInt(e.target.value) }))}
-              className="w-full px-5 py-4 bg-gray-50 rounded-2xl border-none text-center font-black focus:ring-2 focus:ring-blue-400"
-            />
+            <input type="number" value={user.age} onChange={e => setUser(prev => ({ ...prev, age: parseInt(e.target.value) }))} className="w-full px-5 py-4 bg-gray-50 rounded-2xl border-none text-center font-black focus:ring-2 focus:ring-blue-400" />
           </div>
           <div className="flex-1">
             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Qiziqishlar</label>
-            <input 
-              type="text" 
-              placeholder="Tag + Enter"
-              onKeyDown={e => {
+            <input type="text" placeholder="Tag + Enter" onKeyDown={e => {
                 if (e.key === 'Enter') {
                   const val = (e.target as HTMLInputElement).value.trim();
                   if (val && !user.interests.includes(val)) {
@@ -422,12 +345,9 @@ const App: React.FC = () => {
                     (e.target as HTMLInputElement).value = '';
                   }
                 }
-              }}
-              className="w-full px-5 py-4 bg-gray-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-blue-400"
-            />
+              }} className="w-full px-5 py-4 bg-gray-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-blue-400" />
           </div>
         </div>
-        
         <div className="flex flex-wrap gap-2">
           {user.interests.map(i => (
             <span key={i} className="px-3 py-1 bg-gray-900 text-white rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
@@ -435,43 +355,15 @@ const App: React.FC = () => {
             </span>
           ))}
         </div>
-
         <div className="relative">
-          <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 flex justify-between">
-            Bio
-            <button onClick={handleGenerateBio} disabled={isGeneratingBio} className="text-pink-500 flex items-center gap-1 normal-case font-black">
-              {isGeneratingBio ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} AI Bio yaratish
-            </button>
-          </label>
-          <textarea 
-            value={user.bio}
-            onChange={e => setUser(prev => ({ ...prev, bio: e.target.value }))}
-            placeholder="O'zingiz haqingizda bir oz..."
-            rows={3}
-            className="w-full px-5 py-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-400 text-gray-900 font-bold resize-none"
-          />
+          <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 flex justify-between">Bio <button onClick={handleGenerateBio} disabled={isGeneratingBio} className="text-pink-500 flex items-center gap-1 normal-case font-black">{isGeneratingBio ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} AI Bio</button></label>
+          <textarea value={user.bio} onChange={e => setUser(prev => ({ ...prev, bio: e.target.value }))} rows={3} className="w-full px-5 py-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-400 text-gray-900 font-bold resize-none" />
         </div>
-
-        <button 
-          onClick={handleLocationRequest}
-          className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${user.location ? 'bg-green-500 text-white shadow-lg shadow-green-100' : 'bg-blue-50 text-blue-600'}`}
-        >
-          <MapPin size={18} />
-          {user.location ? `Manzil: ${user.location.city}` : 'Joylashuvni aniqlash'}
+        <button onClick={handleLocationRequest} className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${user.location ? 'bg-green-500 text-white shadow-lg' : 'bg-blue-50 text-blue-600'}`}>
+          <MapPin size={18} /> {user.location ? `Manzil: ${user.location.city}` : 'Joylashuvni aniqlash'}
         </button>
-
-        <button 
-          onClick={() => {
-            if (user.name && user.age >= 18) {
-              setUser(prev => ({ ...prev, onboarded: true }));
-              setView('discovery');
-              loadInitialProfiles();
-            }
-          }}
-          disabled={!user.name || user.age < 18}
-          className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-2xl disabled:opacity-50 active:scale-95 transition-all mt-4"
-        >
-          Tayyorman!
+        <button onClick={() => { if (user.name && user.age >= 18) { setUser(prev => ({ ...prev, onboarded: true })); setView('discovery'); loadInitialProfiles(); } }} className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-2xl active:scale-95 transition-all mt-4">
+          Boshlash!
         </button>
       </div>
     </div>
@@ -483,25 +375,18 @@ const App: React.FC = () => {
         {profiles.length > 0 ? (
           <AnimatePresence mode="popLayout">
             {profiles.slice(0, 2).reverse().map((profile, index) => (
-              <Card 
-                key={profile.id} 
-                profile={profile} 
-                isTop={index === 1 || profiles.length === 1}
-                onSwipe={handleSwipe}
-              />
+              <Card key={profile.id} profile={profile} isTop={index === 1 || profiles.length === 1} onSwipe={handleSwipe} />
             ))}
           </AnimatePresence>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <Loader2 className="animate-spin mb-4" size={48} />
-            <p className="font-black uppercase tracking-widest text-[10px]">Atrofingizdagilar qidirilmoqda...</p>
+            <p className="font-black uppercase tracking-widest text-[10px]">Tavsiyalar saralanmoqda...</p>
           </div>
         )}
       </div>
-
       <div className="flex justify-center items-center gap-6 py-6 z-20">
         <button onClick={() => handleSwipe('left')} className="w-14 h-14 rounded-full border-2 border-red-500 text-red-500 flex items-center justify-center bg-white shadow-xl active:scale-75 transition-transform"><X size={28} /></button>
-        <button className="w-12 h-12 rounded-full border-2 border-blue-400 text-blue-400 flex items-center justify-center bg-white shadow-xl active:scale-75 transition-transform"><Star size={24} fill="currentColor" /></button>
         <button onClick={() => handleSwipe('right')} className="w-14 h-14 rounded-full border-2 border-green-500 text-green-500 flex items-center justify-center bg-white shadow-xl active:scale-75 transition-transform"><Heart size={28} fill="currentColor" /></button>
       </div>
     </div>
@@ -509,53 +394,31 @@ const App: React.FC = () => {
 
   const renderMatches = () => (
     <div className="flex-1 overflow-y-auto px-5 py-6 bg-white">
-      <div className="flex justify-between items-end mb-6">
-        <h2 className="text-2xl font-black text-gray-900 tracking-tighter">Yangi mosliklar</h2>
-        <span className="text-[10px] font-black text-pink-500 uppercase tracking-widest flex items-center gap-1"><Zap size={10} fill="currentColor" /> Premium</span>
-      </div>
-      
+      <h2 className="text-2xl font-black text-gray-900 tracking-tighter mb-6">Yangi mosliklar</h2>
       <div className="flex gap-4 overflow-x-auto pb-8 scrollbar-hide">
-        <div className="flex-shrink-0 w-24 h-32 rounded-2xl bg-gradient-to-br from-pink-100 to-orange-50 border-2 border-pink-200 flex flex-col items-center justify-center relative overflow-hidden">
-          <img src="https://picsum.photos/seed/like1/100/100" className="absolute inset-0 w-full h-full object-cover blur-md opacity-40" />
-          <Heart size={24} className="text-pink-500 relative z-10" fill="currentColor" />
-          <span className="text-[10px] font-black text-pink-600 relative z-10 mt-1 uppercase">12 Like</span>
-        </div>
-        
         {matches.filter(m => m.messages.length === 0).map(match => (
-          <div key={match.id} onClick={() => { setActiveMatch(match); setView('chat'); }} className="flex-shrink-0 flex flex-col items-center cursor-pointer">
-            <div className="w-24 h-32 rounded-2xl p-1 border-2 border-pink-500 shadow-lg overflow-hidden relative">
+          <div key={match.id} onClick={() => { setActiveMatch(match); setView('chat'); }} className="flex-shrink-0 flex flex-col items-center">
+            <div className="w-24 h-32 rounded-2xl p-1 border-2 border-pink-500 shadow-lg relative">
               <img src={match.user.imageUrl} className="w-full h-full rounded-xl object-cover" />
-              <div className="absolute bottom-1 left-1 bg-pink-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter">Yangi</div>
             </div>
-            <span className="text-[10px] font-black mt-2 text-gray-900 uppercase tracking-widest">{match.user.name.split(' ')[0]}</span>
+            <span className="text-[10px] font-black mt-2 text-gray-900 uppercase">{match.user.name}</span>
           </div>
         ))}
       </div>
-
       <h2 className="text-2xl font-black mb-4 text-gray-900 tracking-tighter">Suhbatlar</h2>
       <div className="space-y-4">
-        {matches.length > 0 ? matches.map(match => (
-          <div key={match.id} onClick={() => { setActiveMatch(match); setView('chat'); }} className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-3xl cursor-pointer transition-all border border-transparent hover:border-gray-100">
-            <div className="relative shrink-0">
-              <img src={match.user.imageUrl} className="w-16 h-16 rounded-3xl object-cover shadow-md" />
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
-            </div>
-            <div className="flex-1 pb-2">
-              <div className="flex justify-between items-center mb-1">
+        {matches.map(match => (
+          <div key={match.id} onClick={() => { setActiveMatch(match); setView('chat'); }} className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-3xl cursor-pointer">
+            <img src={match.user.imageUrl} className="w-16 h-16 rounded-3xl object-cover shadow-md" />
+            <div className="flex-1">
+              <div className="flex justify-between items-center">
                 <span className="font-black text-gray-900">{match.user.name}</span>
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">{new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="text-[10px] font-black text-gray-400">{new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-              <p className="text-sm text-gray-500 line-clamp-1 font-bold">{match.lastMessage || `👋 Salom deying!`}</p>
+              <p className="text-sm text-gray-500 line-clamp-1 font-bold">{match.lastMessage || `👋 Suhbatni boshlang!`}</p>
             </div>
           </div>
-        )) : (
-          <div className="py-20 text-center text-gray-400">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <MessageCircle size={32} className="opacity-20" />
-            </div>
-            <p className="font-black uppercase tracking-widest text-[10px]">Hozircha suhbatlar yo'q</p>
-          </div>
-        )}
+        ))}
       </div>
     </div>
   );
@@ -563,81 +426,32 @@ const App: React.FC = () => {
   const renderProfile = () => (
     <div className="flex-1 overflow-y-auto bg-white pb-20">
       <div className="relative">
-        <div className="relative h-64 overflow-hidden">
-            <img src={user.coverImageUrl} className="w-full h-full object-cover scale-110 blur-[1px]" />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-white"></div>
-            <div className="absolute top-6 left-6 flex items-center gap-3">
-                <button onClick={() => setView('discovery')} className="p-2.5 bg-white/20 backdrop-blur-xl rounded-full text-white shadow-xl hover:bg-white/40 transition-all">
-                    <ArrowRight className="rotate-180" size={18} />
-                </button>
-                <div className="text-white font-black text-sm tracking-widest drop-shadow-md">{user.name.toLowerCase().replace(/\s+/g, '_')}</div>
-            </div>
-            <button className="absolute top-6 right-6 p-2.5 bg-white/20 backdrop-blur-xl rounded-full text-white shadow-xl">
-                <MoreHorizontal size={20} />
-            </button>
+        <div className="h-64 overflow-hidden relative">
+          <img src={user.coverImageUrl} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-white" />
         </div>
         <div className="flex flex-col items-center -mt-16 relative z-10">
-          <div className="relative w-36 h-36 rounded-full border-[6px] border-white shadow-2xl overflow-hidden bg-white">
+          <div className="w-36 h-36 rounded-full border-[6px] border-white shadow-2xl overflow-hidden bg-white">
             <img src={user.imageUrl} className="w-full h-full object-cover" />
           </div>
-          <div className="mt-4 text-center">
-            <div className="flex items-center justify-center gap-1.5">
-                <h1 className="text-2xl font-black text-gray-900 tracking-tight">{user.name}</h1>
-                {user.isVerified && <BadgeCheck size={20} className="text-blue-500 fill-blue-500" strokeWidth={2.5} color="white" />}
-            </div>
-            <div className="flex items-center justify-center gap-1.5 mt-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Online</span>
-            </div>
+          <h1 className="mt-4 text-2xl font-black text-gray-900">{user.name}, {user.age}</h1>
+          <div className="flex items-center gap-1.5 mt-1 text-xs font-bold text-gray-400 uppercase tracking-widest">
+            <div className="w-2 h-2 bg-green-500 rounded-full" /> Online
           </div>
         </div>
       </div>
-      <div className="px-10 mt-6 text-center">
-        <p className={`text-sm font-medium text-gray-500 leading-relaxed ${bioExpanded ? '' : 'line-clamp-2'}`}>
-          {user.bio || "Salom! Men yangi insonlar bilan tanishishni yaxshi ko'raman."}
-        </p>
-        <button onClick={() => setBioExpanded(!bioExpanded)} className="mt-1 text-blue-600 font-black text-xs uppercase tracking-tighter">
-            {bioExpanded ? "Less" : "More"}
-        </button>
-      </div>
-      <div className="px-6 mt-8 flex items-center gap-3">
-        <button onClick={() => setView('matches')} className="flex-1 py-4 bg-gray-50 rounded-2xl font-black text-gray-900 text-sm tracking-tight shadow-sm active:scale-95 transition-all">
-            Message
-        </button>
-        <button className="w-14 h-14 bg-white border border-gray-100 rounded-full flex items-center justify-center text-gray-900 shadow-sm active:scale-90 transition-all">
-            <DollarSign size={20} />
-        </button>
-        <button className="w-14 h-14 bg-white border border-gray-100 rounded-full flex items-center justify-center text-gray-900 shadow-sm active:scale-90 transition-all">
-            <Share2 size={20} />
-        </button>
+      <div className="px-10 mt-6 text-center text-sm text-gray-500 leading-relaxed italic">
+        "{user.bio || "Salom! Men yangi insonlar bilan tanishishga tayyorman."}"
       </div>
       <div className="px-6 mt-10 space-y-4">
-        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Profil sozlamalari</h3>
-        <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 active:scale-98 transition-all group">
-            <span className="font-bold text-gray-900 text-sm">Ma'lumotlarni tahrirlash</span>
-            <ArrowRight size={16} className="text-gray-300 group-hover:text-gray-900 transition-colors" />
+        <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6">
+            <span className="font-bold text-gray-900 text-sm">Profilni tahrirlash</span>
+            <ArrowRight size={16} />
         </button>
-        <button onClick={() => setShowSettings(!showSettings)} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 active:scale-98 transition-all group">
-            <span className="font-bold text-gray-900 text-sm">Qidiruv filtrlari</span>
-            <Settings size={16} className="text-gray-300 group-hover:text-gray-900 transition-colors" />
+        <button onClick={() => setShowSettings(!showSettings)} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6">
+            <span className="font-bold text-gray-900 text-sm">Filtrlar (Qidiruv)</span>
+            <Settings size={16} />
         </button>
-        {showSettings && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-50 rounded-2xl p-6 space-y-4 border border-gray-100">
-                <div className="space-y-2">
-                    <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-gray-400">
-                        <span>Yosh oralig'i</span>
-                        <span className="text-blue-600">{user.settings.minAge} - {user.settings.maxAge}</span>
-                    </div>
-                    <input 
-                        type="range" 
-                        min="18" max="60" 
-                        value={user.settings.maxAge}
-                        onChange={e => setUser(prev => ({ ...prev, settings: { ...prev.settings, maxAge: parseInt(e.target.value) } }))}
-                        className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-                    />
-                </div>
-            </motion.div>
-        )}
       </div>
     </div>
   );
@@ -646,48 +460,15 @@ const App: React.FC = () => {
     <div className="flex flex-col h-full bg-white">
       <AnimatePresence>
         {matchNotification && (
-          <motion.div
-            initial={{ y: -100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -100, opacity: 0 }}
-            onClick={() => {
-              const currentMatch = matches.find(m => m.user.id === matchNotification.id);
-              if (currentMatch) setActiveMatch(currentMatch);
-              setMatchNotification(null);
-              setView('chat');
-            }}
-            className="fixed top-4 left-4 right-4 z-[110] bg-white rounded-3xl shadow-2xl p-4 flex items-center gap-4 border border-pink-100 cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="relative">
-              <img src={matchNotification.imageUrl} className="w-14 h-14 rounded-2xl object-cover shadow-lg" />
-              <div className="absolute -bottom-1 -right-1 bg-pink-500 p-1 rounded-full text-white ring-2 ring-white">
-                <Heart size={10} fill="currentColor" />
-              </div>
-            </div>
+          <motion.div initial={{ y: -100 }} animate={{ y: 0 }} exit={{ y: -100 }} onClick={() => { setView('chat'); setMatchNotification(null); }} className="fixed top-4 left-4 right-4 z-[110] bg-white rounded-3xl shadow-2xl p-4 flex items-center gap-4 border border-pink-100 cursor-pointer">
+            <img src={matchNotification.imageUrl} className="w-14 h-14 rounded-2xl object-cover shadow-lg" />
             <div className="flex-1">
-              <div className="text-xs font-black text-pink-500 uppercase tracking-widest mb-0.5 flex items-center gap-1">
-                <Bell size={10} /> Yangi moslik!
-              </div>
-              <div className="text-sm font-black text-gray-900">{matchNotification.name} bilan bir-biringizga yoqdingiz!</div>
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Suhbatni boshlash uchun bosing</div>
+              <div className="text-xs font-black text-pink-500 uppercase">Yangi moslik!</div>
+              <div className="text-sm font-black text-gray-900">{matchNotification.name} sizga yoqdi!</div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {view !== 'intro' && view !== 'onboarding' && view !== 'chat' && view !== 'profile' && (
-        <header className="px-6 py-5 flex justify-between items-center border-b bg-white z-40">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gray-900 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-xl">TM</div>
-            <span className="font-black text-gray-900 tracking-tighter text-2xl uppercase">TeleMatch</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="px-3 py-1 bg-blue-50 rounded-full text-[10px] font-black text-blue-600 uppercase tracking-tighter flex items-center gap-1">
-              <RefreshCw size={10} className={isLoading ? 'animate-spin' : ''} /> Live
-            </div>
-          </div>
-        </header>
-      )}
 
       <main className="flex-1 flex flex-col overflow-hidden relative">
         {view === 'intro' && renderIntro()}
@@ -697,12 +478,9 @@ const App: React.FC = () => {
         {view === 'chat' && (
           <div className="flex-1 flex flex-col bg-white">
             <div className="flex items-center gap-3 p-4 border-b">
-              <button onClick={() => setView('matches')} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
-              <img src={activeMatch?.user.imageUrl} className="w-12 h-12 rounded-2xl object-cover shadow-lg" />
-              <div>
-                <div className="font-black text-sm text-gray-900 uppercase tracking-tight">{activeMatch?.user.name}</div>
-                <div className="text-[10px] text-green-500 flex items-center gap-1 font-black uppercase tracking-tighter"><span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Online</div>
-              </div>
+              <button onClick={() => setView('matches')} className="p-2"><X size={20} /></button>
+              <img src={activeMatch?.user.imageUrl} className="w-12 h-12 rounded-2xl object-cover" />
+              <div className="font-black text-sm text-gray-900 uppercase">{activeMatch?.user.name}</div>
             </div>
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
               {activeMatch?.messages.map(msg => (
@@ -714,8 +492,8 @@ const App: React.FC = () => {
               ))}
             </div>
             <div className="p-4 border-t flex gap-2 items-center bg-white safe-area-bottom">
-              <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Xabar yozing..." className="flex-1 bg-gray-100 rounded-full px-6 py-4 text-sm focus:outline-none font-bold border-none" />
-              <button onClick={handleSendMessage} disabled={!chatMessage.trim()} className="w-14 h-14 rounded-full bg-gray-900 text-white flex items-center justify-center disabled:bg-gray-300 shadow-xl transition-all active:scale-90"><Send size={22} /></button>
+              <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Xabar..." className="flex-1 bg-gray-100 rounded-full px-6 py-4 text-sm focus:outline-none font-bold" />
+              <button onClick={handleSendMessage} className="w-14 h-14 rounded-full bg-gray-900 text-white flex items-center justify-center shadow-xl"><Send size={22} /></button>
             </div>
           </div>
         )}
@@ -723,26 +501,16 @@ const App: React.FC = () => {
       </main>
 
       {view !== 'chat' && view !== 'onboarding' && view !== 'intro' && (
-        <nav className="flex justify-around items-center py-5 bg-white border-t border-gray-100 z-40 safe-area-bottom px-6">
-          <button onClick={() => setView('discovery')} className={`p-2 transition-all duration-300 ${view === 'discovery' ? 'text-pink-500 scale-125' : 'text-gray-300'}`}><Flame size={32} fill={view === 'discovery' ? 'currentColor' : 'none'} /></button>
-          <button onClick={() => setView('matches')} className={`p-2 transition-all duration-300 relative ${view === 'matches' ? 'text-pink-500 scale-125' : 'text-gray-300'}`}><MessageCircle size={32} fill={view === 'matches' ? 'currentColor' : 'none'} />{matches.some(m => m.messages.length === 0) && <span className="absolute top-1 right-1 w-3 h-3 bg-pink-500 rounded-full border-2 border-white shadow-sm"></span>}</button>
-          <button onClick={() => setView('profile')} className={`p-2 transition-all duration-300 ${view === 'profile' ? 'text-pink-500 scale-125' : 'text-gray-300'}`}><User size={32} fill={view === 'profile' ? 'currentColor' : 'none'} /></button>
+        <nav className="flex justify-around items-center py-5 bg-white border-t border-gray-100 safe-area-bottom">
+          <button onClick={() => setView('discovery')} className={`p-2 transition-all ${view === 'discovery' ? 'text-pink-500 scale-125' : 'text-gray-300'}`}><Flame size={32} fill={view === 'discovery' ? 'currentColor' : 'none'} /></button>
+          <button onClick={() => setView('matches')} className={`p-2 transition-all ${view === 'matches' ? 'text-pink-500 scale-125' : 'text-gray-300'}`}><MessageCircle size={32} fill={view === 'matches' ? 'currentColor' : 'none'} /></button>
+          <button onClick={() => setView('profile')} className={`p-2 transition-all ${view === 'profile' ? 'text-pink-500 scale-125' : 'text-gray-300'}`}><User size={32} fill={view === 'profile' ? 'currentColor' : 'none'} /></button>
         </nav>
       )}
 
       <AnimatePresence>
         {showMatchSplash && (
-          <MatchSplash 
-            match={showMatchSplash} 
-            userImageUrl={user.imageUrl}
-            onClose={() => setShowMatchSplash(null)} 
-            onChat={() => {
-              const currentMatch = matches.find(m => m.user.id === showMatchSplash.id);
-              if (currentMatch) setActiveMatch(currentMatch);
-              setShowMatchSplash(null);
-              setView('chat');
-            }} 
-          />
+          <MatchSplash match={showMatchSplash} userImageUrl={user.imageUrl} onClose={() => setShowMatchSplash(null)} onChat={() => { setShowMatchSplash(null); setView('chat'); }} />
         )}
       </AnimatePresence>
     </div>

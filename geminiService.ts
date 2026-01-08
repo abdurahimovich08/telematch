@@ -17,9 +17,10 @@ const PROFILE_SCHEMA = {
         items: { type: Type.STRING }
       },
       location: { type: Type.STRING },
-      distance: { type: Type.STRING }
+      distance: { type: Type.STRING },
+      distanceKm: { type: Type.NUMBER }
     },
-    required: ["name", "age", "bio", "interests", "location", "distance"]
+    required: ["name", "age", "bio", "interests", "location", "distance", "distanceKm"]
   }
 };
 
@@ -35,7 +36,6 @@ export async function generateAIProfiles(count: number = 5, userContext?: UserAc
       contents: `Generate ${count} diverse dating profiles for someone living in ${userCity}. 
       The age range MUST be between ${minAge} and ${maxAge}. 
       User interests are: ${userInterests}. 
-      Distances should be between 1-15 miles. 
       Bios should be catchy and relate to their interests. Profiles should feel local to Central Asia/CIS region.`,
       config: {
         responseMimeType: "application/json",
@@ -47,6 +47,10 @@ export async function generateAIProfiles(count: number = 5, userContext?: UserAc
     return profiles.map((p: any, index: number) => ({
       ...p,
       id: `ai-${Date.now()}-${index}`,
+      type: 'ai',
+      lastSeen: Date.now() - Math.random() * 86400000, // so'nggi 24 soat ichida
+      isVerified: Math.random() > 0.7,
+      isPremium: Math.random() > 0.8,
       imageUrl: `https://picsum.photos/seed/${Math.random()}/600/800`
     }));
   } catch (error) {
@@ -83,10 +87,10 @@ export async function getAIReply(userProfile: UserProfile, history: string[]): P
         1. Faol bo'ling: Faqat savollarga javob bermang, o'zingiz ham qiziq savollar bering.
         2. Kayfiyat (Mood): Agar foydalanuvchi zerikarli savol bersa (masalan: "nima gap?", "qalaysan?"), biroz erkalik qiling yoki "bu savolga javob berishni xohlamayman, qiziqroq narsa so'ra" qabilida hazil bilan ohangni o'zgartiring.
         3. Til: Foydalanuvchi tilida javob bering (Uzbek/Russian). 
-        4. Uslub: Kichik harflar bilan yozing, xuddi Telegram'da shoshilib yozgandek. "Salom!" o'rniga "salom", "qanday?" o'rniga "qalaysiz" yoki "nima yangiliklar?".
-        5. Insoniylik: Hech qachon yordamchi yoki AI kabi gapirmang. O'z qiziqishlaringiz haqida gapiring (Bio'dan kelib chiqib). 
-        6. Agar bu birinchi xabar bo'lsa: "salom" deb o'tirmasdan, bio'ingizga mos qiziq gap bilan boshlang (masalan: "rasmingdagi joy qayer? judayam tanish ko'rinyapti").
-        7. Moslikni his qiling: Agar suhbat qiziq bo'lsa, flirty bo'ling, agar user creepy bo'lsa - biroz sovuqroq javob bering.`
+        4. Uslub: Kichik harflar bilan yozing. "Salom!" o'rniga "salom", "qanday?" o'rniga "qalaysiz" yoki "nima yangiliklar?".
+        5. Insoniylik: Hech qachon yordamchi yoki AI kabi gapirmang. O'z qiziqishlaringiz haqida gapiring. 
+        6. Agar bu birinchi xabar bo'lsa: "salom" deb o'tirmasdan, bio'ingizga mos qiziq gap bilan boshlang.
+        7. Moslikni his qiling: Agar suhbat qiziq bo'lsa, flirty bo'ling.`
       }
     });
 
@@ -101,10 +105,10 @@ export async function generateSmartBio(name: string, age: number, interests: str
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Write a short, cool, human-like dating bio for ${name}, age ${age}, who likes ${interests.join(", ")}. It should sound like a person wrote it on their phone, not an AI. Use emojis. Can be in Uzbek or Russian depending on context.`,
+      contents: `Write a short, cool, human-like dating bio for ${name}, age ${age}, who likes ${interests.join(", ")}. Use emojis.`,
     });
     return response.text || "";
   } catch (e) {
-    return "Hayot go'zal! ✨ Yangi tanishuvlarga tayyorman.";
+    return "Hayot go'zal! ✨";
   }
 }

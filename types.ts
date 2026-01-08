@@ -8,11 +8,18 @@ export interface UserProfile {
   coverImageUrl?: string;
   interests: string[];
   location: string;
+  city?: string;
   distance: string;
+  distanceKm?: number;
   isVerified?: boolean;
+  isPremium?: boolean;
+  type: 'real' | 'ai';
+  lastSeen: number; // timestamp
+  score?: number; // saralash balli
 }
 
 export interface UserAccount {
+  id: string; // Telegram User ID
   name: string;
   age: number;
   bio: string;
@@ -20,6 +27,7 @@ export interface UserAccount {
   coverImageUrl?: string;
   interests: string[];
   isVerified?: boolean;
+  isPremium?: boolean;
   location?: {
     lat: number;
     lng: number;
@@ -32,6 +40,7 @@ export interface UserAccount {
     discoveryActive: boolean;
   };
   onboarded: boolean;
+  lastActive: number;
 }
 
 export interface Message {
