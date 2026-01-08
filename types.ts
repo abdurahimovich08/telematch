@@ -46,4 +46,4 @@ export interface Match {
   isPremium?: boolean;
 }
 
-export type ViewState = 'onboarding' | 'discovery' | 'matches' | 'chat' | 'profile';
+export type ViewState = 'intro' | 'onboarding' | 'discovery' | 'matches' | 'chat' | 'profile';

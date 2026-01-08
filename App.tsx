@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Flame, MessageCircle, User, Loader2, X, Heart, Star, Send, Sparkles, MapPin, RefreshCw, Settings, ShieldCheck, Zap } from 'lucide-react';
+import { Flame, MessageCircle, User, Loader2, X, Heart, Star, Send, Sparkles, MapPin, RefreshCw, Settings, ShieldCheck, Zap, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UserProfile, ViewState, Match, Message, UserAccount } from './types';
 import { generateAIProfiles, getAIReply, generateSmartBio, getCityName } from './geminiService';
@@ -16,7 +16,8 @@ declare global {
 const App: React.FC = () => {
   const tg = window.Telegram?.WebApp;
   
-  const [view, setView] = useState<ViewState>('onboarding');
+  const [view, setView] = useState<ViewState>('intro');
+  const [introStep, setIntroStep] = useState(0);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [matches, setMatches] = useState<Match[]>(() => {
     const saved = localStorage.getItem('telematch_matches');
@@ -63,7 +64,7 @@ const App: React.FC = () => {
     if (tg) {
       tg.ready();
       tg.expand();
-      document.body.style.backgroundColor = tg.backgroundColor || '#f3f4f6';
+      document.body.style.backgroundColor = tg.backgroundColor || '#ffffff';
       
       if (!user.onboarded && tg.initDataUnsafe?.user) {
         const tgUser = tg.initDataUnsafe.user;
@@ -161,14 +162,96 @@ const App: React.FC = () => {
     setActiveMatch(finalMatch);
   };
 
+  const renderIntro = () => {
+    const slides = [
+      {
+        icon: <div className="w-24 h-24 bg-blue-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-blue-200"><Flame size={48} fill="currentColor" /></div>,
+        title: "Xush kelibsiz!",
+        desc: "TeleMatch - Telegram ichidagi eng aqlli tanishuv platformasi."
+      },
+      {
+        icon: <div className="w-24 h-24 bg-pink-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-pink-200"><Sparkles size={48} /></div>,
+        title: "AI Yordamchi",
+        desc: "Gemini AI sizga mos keladigan eng yaxshi profillarni topib beradi."
+      },
+      {
+        icon: <div className="w-24 h-24 bg-green-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-green-200"><ShieldCheck size={48} /></div>,
+        title: "Xavfsiz va Maxfiy",
+        desc: "Telegram profilingiz bilan to'liq himoyalangan va xavfsiz suhbatlar."
+      },
+      {
+        icon: <div className="w-24 h-24 bg-gray-900 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-gray-400"><Heart size={48} fill="currentColor" /></div>,
+        title: "Tayyormisiz?",
+        desc: "O'zingizga mos juftlikni topish uchun atigi bir necha qadam qoldi."
+      }
+    ];
+
+    const nextSlide = () => {
+      if (introStep < slides.length - 1) {
+        setIntroStep(prev => prev + 1);
+      } else {
+        setView('onboarding');
+      }
+    };
+
+    return (
+      <div className="flex-1 flex flex-col bg-white overflow-hidden">
+        <div className="flex-1 relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={introStep}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="absolute inset-0 flex flex-col items-center justify-center p-10 text-center"
+            >
+              <div className="mb-8">{slides[introStep].icon}</div>
+              <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">{slides[introStep].title}</h2>
+              <p className="text-gray-500 text-lg font-medium leading-relaxed">{slides[introStep].desc}</p>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        <div className="p-10 flex flex-col items-center gap-8">
+          <div className="flex gap-2">
+            {slides.map((_, i) => (
+              <div 
+                key={i} 
+                className={`h-1.5 rounded-full transition-all duration-300 ${i === introStep ? 'w-8 bg-blue-500' : 'w-2 bg-gray-200'}`}
+              />
+            ))}
+          </div>
+
+          <button 
+            onClick={nextSlide}
+            className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
+          >
+            {introStep === slides.length - 1 ? "Boshlash" : "Keyingisi"}
+            <ArrowRight size={20} />
+          </button>
+          
+          {introStep < slides.length - 1 && (
+            <button 
+              onClick={() => setView('onboarding')}
+              className="text-gray-400 font-bold text-sm uppercase tracking-widest"
+            >
+              O'tkazib yuborish
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderOnboarding = () => (
     <div className="flex-1 flex flex-col p-6 bg-white overflow-y-auto">
-      <div className="mt-8 mb-8 text-center">
-        <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-sm">
-          <img src="https://telegram.org/img/t_logo.png" className="w-10 h-10" />
+      <div className="mt-4 mb-8 text-center">
+        <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest mb-4">
+          <CheckCircle2 size={12} /> Profilni sozlash
         </div>
-        <h1 className="text-3xl font-black text-gray-900 tracking-tight">TeleMatch Setup</h1>
-        <p className="text-gray-500 mt-2 font-medium">Synced with your Telegram Profile</p>
+        <h1 className="text-3xl font-black text-gray-900 tracking-tight">O'zingiz haqingizda</h1>
+        <p className="text-gray-500 mt-1 font-medium text-sm">Boshqalar sizni yaxshiroq tanishi uchun</p>
       </div>
 
       <div className="space-y-6 pb-10">
@@ -179,11 +262,10 @@ const App: React.FC = () => {
               <ShieldCheck size={16} />
             </div>
           </div>
-          <span className="text-[10px] font-black text-blue-500 mt-4 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">Identity Verified</span>
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Full Name</label>
+          <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">To'liq ism</label>
           <div className="w-full px-5 py-4 bg-gray-50 rounded-2xl text-gray-900 font-bold border border-gray-100">
             {user.name || 'Anonymous'}
           </div>
@@ -191,7 +273,7 @@ const App: React.FC = () => {
 
         <div className="flex gap-4">
           <div className="w-24">
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Age</label>
+            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Yosh</label>
             <input 
               type="number" 
               value={user.age}
@@ -200,10 +282,10 @@ const App: React.FC = () => {
             />
           </div>
           <div className="flex-1">
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Interests</label>
+            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Qiziqishlar</label>
             <input 
               type="text" 
-              placeholder="Add Tag + Enter"
+              placeholder="Tag + Enter"
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   const val = (e.target as HTMLInputElement).value.trim();
@@ -230,13 +312,13 @@ const App: React.FC = () => {
           <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 flex justify-between">
             Bio
             <button onClick={handleGenerateBio} disabled={isGeneratingBio} className="text-pink-500 flex items-center gap-1 normal-case font-black">
-              {isGeneratingBio ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} AI Smart Bio
+              {isGeneratingBio ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} AI Bio yaratish
             </button>
           </label>
           <textarea 
             value={user.bio}
             onChange={e => setUser(prev => ({ ...prev, bio: e.target.value }))}
-            placeholder="What's your story?"
+            placeholder="O'zingiz haqingizda bir oz..."
             rows={3}
             className="w-full px-5 py-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-400 text-gray-900 font-bold resize-none"
           />
@@ -247,7 +329,7 @@ const App: React.FC = () => {
           className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${user.location ? 'bg-green-500 text-white shadow-lg shadow-green-100' : 'bg-blue-50 text-blue-600'}`}
         >
           <MapPin size={18} />
-          {user.location ? `Located in ${user.location.city}` : 'Verify My Location'}
+          {user.location ? `Manzil: ${user.location.city}` : 'Joylashuvni aniqlash'}
         </button>
 
         <button 
@@ -261,7 +343,7 @@ const App: React.FC = () => {
           disabled={!user.name || user.age < 18}
           className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-2xl disabled:opacity-50 active:scale-95 transition-all mt-4"
         >
-          Start Swiping
+          Tayyorman!
         </button>
       </div>
     </div>
@@ -284,7 +366,7 @@ const App: React.FC = () => {
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <Loader2 className="animate-spin mb-4" size={48} />
-            <p className="font-black uppercase tracking-widest text-[10px]">Scanning Telegram Nearby...</p>
+            <p className="font-black uppercase tracking-widest text-[10px]">Atrofingizdagilar qidirilmoqda...</p>
           </div>
         )}
       </div>
@@ -300,30 +382,29 @@ const App: React.FC = () => {
   const renderMatches = () => (
     <div className="flex-1 overflow-y-auto px-5 py-6 bg-white">
       <div className="flex justify-between items-end mb-6">
-        <h2 className="text-2xl font-black text-gray-900 tracking-tighter">Secret Admirers</h2>
-        <span className="text-[10px] font-black text-pink-500 uppercase tracking-widest flex items-center gap-1"><Zap size={10} fill="currentColor" /> Premium Only</span>
+        <h2 className="text-2xl font-black text-gray-900 tracking-tighter">Yangi mosliklar</h2>
+        <span className="text-[10px] font-black text-pink-500 uppercase tracking-widest flex items-center gap-1"><Zap size={10} fill="currentColor" /> Premium</span>
       </div>
       
       <div className="flex gap-4 overflow-x-auto pb-8 scrollbar-hide">
-        {/* Blurred "Likes You" section for monetization logic */}
         <div className="flex-shrink-0 w-24 h-32 rounded-2xl bg-gradient-to-br from-pink-100 to-orange-50 border-2 border-pink-200 flex flex-col items-center justify-center relative overflow-hidden">
           <img src="https://picsum.photos/seed/like1/100/100" className="absolute inset-0 w-full h-full object-cover blur-md opacity-40" />
           <Heart size={24} className="text-pink-500 relative z-10" fill="currentColor" />
-          <span className="text-[10px] font-black text-pink-600 relative z-10 mt-1 uppercase">12 Likes</span>
+          <span className="text-[10px] font-black text-pink-600 relative z-10 mt-1 uppercase">12 Like</span>
         </div>
         
         {matches.filter(m => m.messages.length === 0).map(match => (
           <div key={match.id} onClick={() => { setActiveMatch(match); setView('chat'); }} className="flex-shrink-0 flex flex-col items-center cursor-pointer">
             <div className="w-24 h-32 rounded-2xl p-1 border-2 border-pink-500 shadow-lg overflow-hidden relative">
               <img src={match.user.imageUrl} className="w-full h-full rounded-xl object-cover" />
-              <div className="absolute bottom-1 left-1 bg-pink-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter">New</div>
+              <div className="absolute bottom-1 left-1 bg-pink-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter">Yangi</div>
             </div>
             <span className="text-[10px] font-black mt-2 text-gray-900 uppercase tracking-widest">{match.user.name.split(' ')[0]}</span>
           </div>
         ))}
       </div>
 
-      <h2 className="text-2xl font-black mb-4 text-gray-900 tracking-tighter">Conversations</h2>
+      <h2 className="text-2xl font-black mb-4 text-gray-900 tracking-tighter">Suhbatlar</h2>
       <div className="space-y-4">
         {matches.length > 0 ? matches.map(match => (
           <div key={match.id} onClick={() => { setActiveMatch(match); setView('chat'); }} className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-3xl cursor-pointer transition-all border border-transparent hover:border-gray-100">
@@ -336,7 +417,7 @@ const App: React.FC = () => {
                 <span className="font-black text-gray-900">{match.user.name}</span>
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">{new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-              <p className="text-sm text-gray-500 line-clamp-1 font-bold">{match.lastMessage || `👋 ${match.user.name} is waiting for you!`}</p>
+              <p className="text-sm text-gray-500 line-clamp-1 font-bold">{match.lastMessage || `👋 Salom deying!`}</p>
             </div>
           </div>
         )) : (
@@ -344,7 +425,7 @@ const App: React.FC = () => {
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <MessageCircle size={32} className="opacity-20" />
             </div>
-            <p className="font-black uppercase tracking-widest text-[10px]">Your inbox is empty</p>
+            <p className="font-black uppercase tracking-widest text-[10px]">Hozircha suhbatlar yo'q</p>
           </div>
         )}
       </div>
@@ -370,11 +451,10 @@ const App: React.FC = () => {
       <div className="px-6 pb-6 space-y-6">
         {showSettings ? (
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
-            <h3 className="font-black text-xs uppercase tracking-widest text-gray-400 mb-2">Discovery Settings</h3>
-            
+            <h3 className="font-black text-xs uppercase tracking-widest text-gray-400 mb-2">Qidiruv sozlamalari</h3>
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-black uppercase tracking-wider">
-                <span>Age Range</span>
+                <span>Yosh oralig'i</span>
                 <span>{user.settings.minAge} - {user.settings.maxAge}</span>
               </div>
               <input 
@@ -385,48 +465,22 @@ const App: React.FC = () => {
                 className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-500" 
               />
             </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-black uppercase tracking-wider">
-                <span>Distance Limit</span>
-                <span>{user.settings.distanceLimit} miles</span>
-              </div>
-              <input 
-                type="range" 
-                min="1" max="100" 
-                value={user.settings.distanceLimit}
-                onChange={e => setUser(prev => ({ ...prev, settings: { ...prev.settings, distanceLimit: parseInt(e.target.value) } }))}
-                className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-              />
-            </div>
-
-            <button onClick={() => setShowSettings(false)} className="w-full py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest mt-4">Save Changes</button>
+            <button onClick={() => setShowSettings(false)} className="w-full py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest mt-4">Saqlash</button>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center">
                 <span className="text-3xl font-black text-gray-900">{matches.length}</span>
-                <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest mt-1">Total Matches</span>
+                <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest mt-1">Mosliklar</span>
               </div>
               <div className="bg-gradient-to-br from-blue-600 to-blue-400 p-6 rounded-3xl shadow-lg flex flex-col items-center text-white">
                 <Zap size={24} fill="currentColor" className="mb-1" />
-                <span className="text-[10px] uppercase font-black tracking-widest">Boost Profile</span>
+                <span className="text-[10px] uppercase font-black tracking-widest">Profil Boost</span>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
-              <h3 className="font-black mb-3 text-gray-400 uppercase tracking-widest text-[10px]">Your Personality</h3>
-              <p className="text-gray-900 text-sm leading-relaxed font-bold">{user.bio || "Add a bio to attract more matches!"}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {user.interests.map(i => (
-                  <span key={i} className="px-3 py-1 bg-gray-50 border border-gray-100 rounded-full text-[10px] font-black text-gray-600 uppercase tracking-widest">{i}</span>
-                ))}
-              </div>
-            </div>
-
-            <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white text-gray-900 border-2 border-gray-100 rounded-3xl font-black shadow-sm active:scale-95 transition-all text-xs uppercase tracking-widest">Edit My Info</button>
-            <p className="text-center text-[10px] font-black text-gray-300 uppercase tracking-widest mt-4">Mini App v1.2.0 • Build 842</p>
+            <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white text-gray-900 border-2 border-gray-100 rounded-3xl font-black shadow-sm active:scale-95 transition-all text-xs uppercase tracking-widest">Ma'lumotlarni tahrirlash</button>
           </>
         )}
       </div>
@@ -435,7 +489,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {view !== 'onboarding' && (
+      {view !== 'intro' && view !== 'onboarding' && view !== 'chat' && (
         <header className="px-6 py-5 flex justify-between items-center border-b bg-white z-40">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-gray-900 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-xl">TM</div>
@@ -450,6 +504,7 @@ const App: React.FC = () => {
       )}
 
       <main className="flex-1 flex flex-col overflow-hidden relative">
+        {view === 'intro' && renderIntro()}
         {view === 'onboarding' && renderOnboarding()}
         {view === 'discovery' && renderDiscovery()}
         {view === 'matches' && renderMatches()}
@@ -460,7 +515,7 @@ const App: React.FC = () => {
               <img src={activeMatch?.user.imageUrl} className="w-12 h-12 rounded-2xl object-cover shadow-lg" />
               <div>
                 <div className="font-black text-sm text-gray-900 uppercase tracking-tight">{activeMatch?.user.name}</div>
-                <div className="text-[10px] text-green-500 flex items-center gap-1 font-black uppercase tracking-tighter"><span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Online Now</div>
+                <div className="text-[10px] text-green-500 flex items-center gap-1 font-black uppercase tracking-tighter"><span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Online</div>
               </div>
             </div>
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
@@ -473,7 +528,7 @@ const App: React.FC = () => {
               ))}
             </div>
             <div className="p-4 border-t flex gap-2 items-center bg-white safe-area-bottom">
-              <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Write a message..." className="flex-1 bg-gray-100 rounded-full px-6 py-4 text-sm focus:outline-none font-bold border-none" />
+              <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Xabar yozing..." className="flex-1 bg-gray-100 rounded-full px-6 py-4 text-sm focus:outline-none font-bold border-none" />
               <button onClick={handleSendMessage} disabled={!chatMessage.trim()} className="w-14 h-14 rounded-full bg-gray-900 text-white flex items-center justify-center disabled:bg-gray-300 shadow-xl transition-all active:scale-90"><Send size={22} /></button>
             </div>
           </div>
@@ -481,7 +536,7 @@ const App: React.FC = () => {
         {view === 'profile' && renderProfile()}
       </main>
 
-      {view !== 'chat' && view !== 'onboarding' && (
+      {view !== 'chat' && view !== 'onboarding' && view !== 'intro' && (
         <nav className="flex justify-around items-center py-5 bg-white border-t border-gray-100 z-40 safe-area-bottom px-6">
           <button onClick={() => setView('discovery')} className={`p-2 transition-all duration-300 ${view === 'discovery' ? 'text-pink-500 scale-125' : 'text-gray-300'}`}><Flame size={32} fill={view === 'discovery' ? 'currentColor' : 'none'} /></button>
           <button onClick={() => setView('matches')} className={`p-2 transition-all duration-300 relative ${view === 'matches' ? 'text-pink-500 scale-125' : 'text-gray-300'}`}><MessageCircle size={32} fill={view === 'matches' ? 'currentColor' : 'none'} />{matches.some(m => m.messages.length === 0) && <span className="absolute top-1 right-1 w-3 h-3 bg-pink-500 rounded-full border-2 border-white shadow-sm"></span>}</button>
