@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Flame, MessageCircle, User, Loader2, X, Heart, Send, Sparkles, MapPin, RefreshCw, Settings, ArrowRight, BadgeCheck, Camera, ExternalLink, Bell, ShieldCheck } from 'lucide-react';
+import { Flame, MessageCircle, User, Loader2, X, Heart, Send, Sparkles, MapPin, RefreshCw, Settings, ArrowRight, BadgeCheck, Camera, ExternalLink, Bell, ShieldCheck, Gift, Search, Pencil } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UserProfile, ViewState, Match, Message, UserAccount } from './types';
 import { generateAIProfiles, getAIReply, generateSmartBio, getCityName } from './geminiService';
@@ -17,20 +17,15 @@ const App: React.FC = () => {
   const tg = window.Telegram?.WebApp;
   const tgUser = tg?.initDataUnsafe?.user;
   
-  const STORAGE_KEY_USER = tgUser ? `telematch_user_${tgUser.id}` : 'telematch_user_guest';
-  const STORAGE_KEY_MATCHES = tgUser ? `telematch_matches_${tgUser.id}` : 'telematch_matches_guest';
-
   const [view, setView] = useState<ViewState>('intro');
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [matches, setMatches] = useState<Match[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_MATCHES);
+    const saved = localStorage.getItem('telematch_matches_v2');
     return saved ? JSON.parse(saved) : [];
   });
   
-  const [hasWriteAccess, setHasWriteAccess] = useState(false);
-  
   const [user, setUser] = useState<UserAccount>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_USER);
+    const saved = localStorage.getItem('telematch_user_v2');
     const initialUser = saved ? JSON.parse(saved) : null;
     const telegramPhoto = tgUser?.photo_url || `https://ui-avatars.com/api/?name=${tgUser?.first_name || 'User'}&background=random&size=512`;
 
@@ -40,16 +35,9 @@ const App: React.FC = () => {
       age: initialUser?.age || 21,
       bio: initialUser?.bio || '',
       imageUrl: telegramPhoto,
-      coverImageUrl: initialUser?.coverImageUrl || 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&auto=format&fit=crop',
-      interests: initialUser?.interests || [],
+      interests: initialUser?.interests || ['Coffee', 'Travel', 'Art'],
       isVerified: true,
-      isPremium: tgUser?.is_premium || false,
-      settings: initialUser?.settings || {
-        minAge: 18,
-        maxAge: 35,
-        distanceLimit: 25,
-        discoveryActive: true
-      },
+      settings: initialUser?.settings || { minAge: 18, maxAge: 35, distanceLimit: 25, discoveryActive: true },
       onboarded: initialUser?.onboarded || false,
       lastActive: Date.now()
     };
@@ -59,7 +47,6 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [showMatchSplash, setShowMatchSplash] = useState<UserProfile | null>(null);
-  const [matchNotification, setMatchNotification] = useState<UserProfile | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -67,30 +54,19 @@ const App: React.FC = () => {
     if (tg) {
       tg.ready();
       tg.expand();
-      
-      if (view !== 'discovery' && view !== 'intro' && view !== 'onboarding') {
-        tg.BackButton.show();
-        tg.BackButton.onClick(() => setView('discovery'));
-      } else {
-        tg.BackButton.hide();
-      }
-      tg.setHeaderColor(tg.colorScheme === 'dark' ? '#000000' : '#ffffff');
+      tg.setHeaderColor('#0a0a0a');
     }
-  }, [view]);
+    if (user.onboarded) {
+      setView('discovery');
+      loadInitialProfiles();
+    }
+  }, []);
 
-  const requestTelegramPermissions = () => {
-    if (tg && tg.requestWriteAccess) {
-      tg.requestWriteAccess((allowed: boolean) => {
-        if (allowed) {
-          setHasWriteAccess(true);
-          if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-          tg.showAlert("Muvaffaqiyatli! Endi bot sizga yangi matchlar haqida xabar yuboradi.");
-        }
-      });
-    } else {
-      // Fallback for browsers
-      setHasWriteAccess(true);
-    }
+  const loadInitialProfiles = async () => {
+    setIsLoading(true);
+    const aiProfiles = await generateAIProfiles(8, user);
+    setProfiles(aiProfiles);
+    setIsLoading(false);
   };
 
   const handleSwipe = useCallback(async (direction: 'left' | 'right') => {
@@ -101,226 +77,283 @@ const App: React.FC = () => {
       tg.HapticFeedback.impactOccurred(direction === 'right' ? 'medium' : 'light');
     }
 
-    if (direction === 'right' && (swipedProfile.type === 'ai' || Math.random() > 0.5)) {
-      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    if (direction === 'right' && (swipedProfile.type === 'ai' || Math.random() > 0.4)) {
       const matchId = `match-${Date.now()}`;
       const newMatch: Match = { id: matchId, user: swipedProfile, timestamp: Date.now(), messages: [] };
       setMatches(prev => [newMatch, ...prev]);
-      
-      if (view === 'discovery') {
-        setShowMatchSplash(swipedProfile);
-      } else {
-        setMatchNotification(swipedProfile);
-        setTimeout(() => setMatchNotification(null), 5000);
-      }
-
-      if (swipedProfile.type === 'ai') {
-        triggerAIInitiation(matchId, swipedProfile);
-      }
+      setShowMatchSplash(swipedProfile);
     }
 
     setProfiles(prev => prev.slice(1));
-    if (profiles.length < 4) {
+    if (profiles.length < 3) {
       const more = await generateAIProfiles(5, user);
       setProfiles(prev => [...prev, ...more]);
     }
-  }, [profiles, user, view, tg]);
-
-  const triggerAIInitiation = async (matchId: string, profile: UserProfile) => {
-    setTimeout(async () => {
-      setIsTyping(true);
-      const firstReply = await getAIReply(profile, []);
-      setIsTyping(false);
-      const aiMsg: Message = { id: Date.now().toString(), senderId: profile.id, text: firstReply, timestamp: Date.now() };
-      setMatches(prev => prev.map(m => m.id === matchId ? { ...m, messages: [aiMsg], lastMessage: firstReply } : m));
-      setActiveMatch(current => current?.id === matchId ? { ...current, messages: [aiMsg], lastMessage: firstReply } : current);
-    }, 2500);
-  };
+  }, [profiles, user, tg]);
 
   const handleSendMessage = async () => {
     if (!chatMessage.trim() || !activeMatch) return;
     const userMsg: Message = { id: Date.now().toString(), senderId: 'user', text: chatMessage, timestamp: Date.now() };
-    const currentMatchId = activeMatch.id;
     const updatedMatch = { ...activeMatch, messages: [...activeMatch.messages, userMsg], lastMessage: chatMessage };
-    
-    setMatches(prev => prev.map(m => m.id === currentMatchId ? updatedMatch : m));
+    setMatches(prev => prev.map(m => m.id === activeMatch.id ? updatedMatch : m));
     setActiveMatch(updatedMatch);
     setChatMessage('');
     
-    if (activeMatch.user.type === 'ai') {
-      setIsTyping(true);
-      const history = updatedMatch.messages.map(m => `${m.senderId === 'user' ? 'User' : m.senderId}: ${m.text}`);
-      const replyText = await getAIReply(activeMatch.user, history);
-      
-      const thinkingDelay = Math.min(4000, Math.max(1500, replyText.length * 25));
-      setTimeout(() => {
-        setIsTyping(false);
-        const aiMsg: Message = { id: (Date.now() + 1).toString(), senderId: activeMatch.user.id, text: replyText, timestamp: Date.now() };
-        const finalMatch = { ...updatedMatch, messages: [...updatedMatch.messages, aiMsg], lastMessage: replyText };
-        setMatches(prev => prev.map(m => m.id === currentMatchId ? finalMatch : m));
-        setActiveMatch(current => current?.id === currentMatchId ? finalMatch : current);
-        if (tg?.HapticFeedback) tg.HapticFeedback.selectionChanged();
-      }, thinkingDelay);
-    }
+    setIsTyping(true);
+    const replyText = await getAIReply(activeMatch.user, updatedMatch.messages.map(m => m.text));
+    setTimeout(() => {
+      setIsTyping(false);
+      const aiMsg: Message = { id: Date.now().toString(), senderId: activeMatch.user.id, text: replyText, timestamp: Date.now() };
+      const finalMatch = { ...updatedMatch, messages: [...updatedMatch.messages, aiMsg], lastMessage: replyText };
+      setMatches(prev => prev.map(m => m.id === activeMatch.id ? finalMatch : m));
+      setActiveMatch(finalMatch);
+    }, 2000);
   };
 
-  const renderOnboarding = () => (
-    <div className="flex-1 flex flex-col p-6 bg-white overflow-y-auto">
-      <div className="mt-4 mb-8 text-center">
-        <h1 className="text-3xl font-black text-gray-900 tracking-tight">Sozlamalar</h1>
-        <p className="text-gray-500 text-sm mt-2">Telegram bilan maksimal integratsiyani yoqing</p>
+  const renderIntro = () => (
+    <div className="flex-1 flex flex-col bg-[#0a0a0a] relative grid-bg overflow-hidden px-8 pb-12 pt-20">
+      {/* Connexa Logo Simulation */}
+      <div className="absolute top-12 left-0 right-0 text-center">
+        <span className="text-white/80 font-extrabold text-xl tracking-wide uppercase">Connexa</span>
       </div>
 
-      <div className="space-y-6 pb-10">
-        <div className="p-5 bg-blue-50 rounded-3xl border border-blue-100">
-           <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center text-white">
-                <Bell size={24} />
-              </div>
-              <div>
-                <h3 className="font-black text-gray-900 leading-tight">Bot Xabarnomalari</h3>
-                <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">OFFLINE REJIMDA HAM ALOQA</p>
-              </div>
-           </div>
-           <p className="text-sm text-blue-800/70 font-medium mb-4">Ilovadan chiqqaningizda bot sizga yangi matchlar va xabarlar haqida bildirishnoma yuboradi.</p>
-           {!hasWriteAccess ? (
-             <button onClick={requestTelegramPermissions} className="w-full py-3 bg-blue-500 text-white rounded-2xl font-black text-sm active:scale-95 transition-all flex items-center justify-center gap-2">
-               Ruxsat berish <ShieldCheck size={18} />
-             </button>
-           ) : (
-             <div className="w-full py-3 bg-green-500 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2">
-               Integratsiya faol <BadgeCheck size={18} />
-             </div>
-           )}
+      {/* Stacked Cards Illustration */}
+      <div className="flex-1 relative flex items-center justify-center">
+        <div className="relative w-full h-[400px]">
+          {/* Card 1 */}
+          <motion.div 
+            initial={{ rotate: -12, x: -40, opacity: 0 }}
+            animate={{ rotate: -12, x: -40, opacity: 1 }}
+            className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-64 rounded-3xl overflow-hidden shadow-2xl border border-white/10"
+          >
+            <img src="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400" className="w-full h-full object-cover grayscale-[0.2]" />
+            <div className="absolute bottom-4 left-4 text-white text-[10px] font-black uppercase">Jastin, 24</div>
+            <div className="absolute top-4 left-4 w-6 h-6 bg-purple-600 rounded-lg flex items-center justify-center"><Gift size={12} className="text-white" /></div>
+          </motion.div>
+          
+          {/* Card 2 (Active looking) */}
+          <motion.div 
+            initial={{ rotate: 12, x: 40, opacity: 0 }}
+            animate={{ rotate: 12, x: 40, opacity: 1 }}
+            className="absolute top-10 left-1/2 -translate-x-1/2 w-48 h-64 rounded-3xl overflow-hidden shadow-2xl border border-white/20 z-10"
+          >
+            <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400" className="w-full h-full object-cover" />
+            <div className="absolute bottom-4 left-4 text-white text-[10px] font-black uppercase">Julia, 27</div>
+            <div className="absolute top-4 left-4 w-6 h-6 bg-blue-500 rounded-lg flex items-center justify-center"><MessageCircle size={12} className="text-white" fill="currentColor" /></div>
+            <div className="absolute top-1/2 right-4 -translate-y-1/2 w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-lg"><Heart size={20} className="text-white" fill="currentColor" /></div>
+          </motion.div>
         </div>
+      </div>
 
-        <div className="space-y-4">
-          <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Qidiruv filtrlari</label>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <input type="number" placeholder="Min yosh" value={user.settings.minAge} onChange={e => setUser(prev => ({ ...prev, settings: { ...prev.settings, minAge: parseInt(e.target.value) } }))} className="w-full px-5 py-4 bg-gray-50 rounded-2xl border-none font-bold" />
-            </div>
-            <div className="flex-1">
-              <input type="number" placeholder="Max yosh" value={user.settings.maxAge} onChange={e => setUser(prev => ({ ...prev, settings: { ...prev.settings, maxAge: parseInt(e.target.value) } }))} className="w-full px-5 py-4 bg-gray-50 rounded-2xl border-none font-bold" />
-            </div>
+      {/* Text Section */}
+      <div className="text-center mt-4">
+        <h1 className="text-[44px] font-extrabold leading-[1.1] tracking-tight mb-4">
+          Find Your <br />
+          <span className="text-[#ff5200]">Perfect</span> Match
+        </h1>
+        <p className="text-gray-500 text-sm font-medium px-4">
+          Meet New People, Spark Real Connections, <br /> And See Where It Goes.
+        </p>
+      </div>
+
+      {/* Button Section */}
+      <div className="mt-12">
+        <button 
+          onClick={() => setView('onboarding')} 
+          className="w-full h-16 bg-white/5 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-between px-6 active:scale-95 transition-all group"
+        >
+          <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,82,0,0.4)]">
+             <Heart size={20} className="text-white" fill="currentColor" />
           </div>
-        </div>
-
-        <button onClick={() => { setUser(prev => ({ ...prev, onboarded: true })); setView('discovery'); }} className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-2xl active:scale-95 transition-all mt-6">
-          Ilovaga kirish
+          <span className="text-white font-bold text-lg">Get Started</span>
+          <div className="flex gap-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
+            <ArrowRight size={20} />
+            <ArrowRight size={20} className="-ml-3" />
+          </div>
         </button>
       </div>
     </div>
   );
 
-  return (
-    <div className="flex flex-col h-full bg-white select-none">
-      <style>{`
-        .animate-spin-slow { animation: spin 3s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .dot-flashing {
-          position: relative; width: 6px; height: 6px; border-radius: 5px; background-color: #94a3b8; color: #94a3b8;
-          animation: dot-flashing 1s infinite linear alternate; animation-delay: 0.5s;
-        }
-        .dot-flashing::before, .dot-flashing::after { content: ""; display: inline-block; position: absolute; top: 0; }
-        .dot-flashing::before { left: -12px; width: 6px; height: 6px; border-radius: 5px; background-color: #94a3b8; animation: dot-flashing 1s infinite alternate; animation-delay: 0s; }
-        .dot-flashing::after { left: 12px; width: 6px; height: 6px; border-radius: 5px; background-color: #94a3b8; animation: dot-flashing 1s infinite alternate; animation-delay: 1s; }
-        @keyframes dot-flashing { 0% { background-color: #94a3b8; } 50%, 100% { background-color: #e2e8f0; } }
-        .telegram-bubble { position: relative; max-width: 85%; padding: 8px 12px; border-radius: 12px; font-weight: 500; font-size: 15px; line-height: 1.4; }
-        .bubble-in { background-color: #ffffff; color: #000000; align-self: flex-start; border-bottom-left-radius: 2px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
-        .bubble-out { background-color: #effdde; color: #000000; align-self: flex-end; border-bottom-right-radius: 2px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
-      `}</style>
-
-      <main className="flex-1 flex flex-col overflow-hidden relative">
-        {view === 'intro' && (
-           <div className="flex-1 flex flex-col bg-white items-center justify-center p-10 text-center">
-             <div className="w-24 h-24 bg-blue-500 rounded-3xl flex items-center justify-center text-white shadow-2xl mb-8">
-               <Flame size={48} fill="currentColor" />
-             </div>
-             <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">TeleMatch</h2>
-             <p className="text-gray-500 text-lg font-medium leading-relaxed">Telegram orqali yangi insonlar bilan tanishishning eng aqlli yo'li.</p>
-             <div className="mt-8 flex items-center gap-2 text-blue-500 bg-blue-50 px-4 py-2 rounded-full text-xs font-black uppercase">
-                <ShieldCheck size={16} /> 100% Xavfsiz & Telegram Verified
-             </div>
-             <button onClick={() => setView('onboarding')} className="w-full mt-10 py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-                Keyingisi <ArrowRight size={20} />
-             </button>
-           </div>
-        )}
-        {view === 'onboarding' && renderOnboarding()}
-        {view === 'discovery' && (
-          <div className="flex-1 flex flex-col p-4 relative overflow-hidden bg-gray-50">
-            <div className="relative flex-1">
-              {profiles.length > 0 ? (
-                <AnimatePresence mode="popLayout">
-                  {profiles.slice(0, 2).reverse().map((profile, index) => (
-                    <Card key={profile.id} profile={profile} isTop={index === 1 || profiles.length === 1} onSwipe={handleSwipe} />
-                  ))}
-                </AnimatePresence>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <Loader2 className="animate-spin mb-4" size={48} />
-                  <p className="font-black uppercase tracking-widest text-[10px]">Yangi profillar...</p>
-                </div>
-              )}
-            </div>
-            <div className="flex justify-center items-center gap-6 py-6 z-20">
-              <button onClick={() => handleSwipe('left')} className="w-14 h-14 rounded-full border-2 border-red-500 text-red-500 flex items-center justify-center bg-white shadow-xl active:scale-75 transition-transform"><X size={28} /></button>
-              <button onClick={() => handleSwipe('right')} className="w-14 h-14 rounded-full border-2 border-green-500 text-green-500 flex items-center justify-center bg-white shadow-xl active:scale-75 transition-transform"><Heart size={28} fill="currentColor" /></button>
+  const renderDiscovery = () => (
+    <div className="flex-1 flex flex-col bg-[#0a0a0a] relative overflow-hidden">
+      {/* Top Header */}
+      <div className="flex items-center justify-between px-6 pt-12 pb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full overflow-hidden border border-white/20">
+            <img src={user.imageUrl} className="w-full h-full object-cover" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-white/40 text-[10px] font-bold uppercase tracking-wider">Hello {user.name}!</span>
+            <div className="flex items-center gap-1 text-white text-xs font-bold">
+               <MapPin size={12} className="text-orange-500" /> Washington, USA
             </div>
           </div>
+        </div>
+        <button className="w-10 h-10 glass rounded-full flex items-center justify-center">
+          <Search size={20} className="text-white/60" />
+        </button>
+      </div>
+
+      {/* Card Container */}
+      <div className="flex-1 px-4 relative mt-2">
+        {profiles.length > 0 ? (
+          <AnimatePresence mode="popLayout">
+            {profiles.slice(0, 2).reverse().map((profile, index) => (
+              <Card key={profile.id} profile={profile} isTop={index === 1 || profiles.length === 1} onSwipe={handleSwipe} />
+            ))}
+          </AnimatePresence>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-white/20">
+            <Loader2 className="animate-spin mb-4" size={48} />
+            <p className="font-bold uppercase tracking-widest text-xs">Finding matches...</p>
+          </div>
         )}
-        {view === 'chat' && activeMatch && (
-           <div className="flex-1 flex flex-col bg-[#e6ebee]">
-              <div className="flex items-center gap-3 p-3 bg-white border-b z-10 shadow-sm">
-                <img src={activeMatch.user.imageUrl} className="w-10 h-10 rounded-full object-cover shadow-sm" />
-                <div className="flex flex-col flex-1">
-                  <div className="font-bold text-[15px] leading-tight flex items-center gap-1">
-                    {activeMatch.user.name}
-                    {activeMatch.user.isVerified && <BadgeCheck size={14} className="text-blue-500 fill-blue-500" color="white" />}
-                  </div>
-                  <div className="text-[12px] text-gray-400 font-medium">
-                    {isTyping ? <span className="text-blue-500 animate-pulse">yozmoqda...</span> : 'onlayn'}
-                  </div>
-                </div>
-                <button onClick={() => tg.openTelegramLink(`https://t.me/user?id=${activeMatch.user.id}`)} className="p-2 text-blue-500">
-                  <ExternalLink size={20} />
-                </button>
-              </div>
-              
-              <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 bg-[#e6ebee]" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundBlendMode: 'overlay', backgroundSize: '400px' }}>
-                {activeMatch.messages.map(msg => (
-                  <div key={msg.id} className={`telegram-bubble ${msg.senderId === 'user' ? 'bubble-out' : 'bubble-in'}`}>
-                    {msg.text}
-                    <div className="text-[9px] mt-1 text-right opacity-40 font-bold">
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex justify-center items-center gap-4 py-8 relative z-20">
+        <button onClick={() => handleSwipe('left')} className="w-16 h-16 rounded-full glass flex items-center justify-center active:scale-75 transition-transform">
+          <X size={32} className="text-orange-500" />
+        </button>
+        <button className="w-16 h-16 rounded-2xl bg-purple-600/20 border border-purple-600/30 flex items-center justify-center active:scale-75 transition-transform shadow-[0_0_20px_rgba(123,47,247,0.2)]">
+          <Gift size={32} className="text-purple-500" />
+        </button>
+        <button onClick={() => handleSwipe('right')} className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center active:scale-75 transition-transform shadow-[0_0_30px_rgba(34,197,94,0.3)]">
+          <Heart size={32} className="text-white" fill="currentColor" />
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderProfile = () => (
+    <div className="flex-1 overflow-y-auto bg-[#0a0a0a] pb-24">
+      {/* Header Info */}
+      <div className="px-6 pt-12 flex items-center justify-between mb-6">
+        <button className="w-10 h-10 glass rounded-full flex items-center justify-center">
+          <Settings size={20} className="text-white/60" />
+        </button>
+        <div className="flex flex-col items-center">
+          <h2 className="text-xl font-extrabold flex items-center gap-2">
+            {user.name}, {user.age}
+            <BadgeCheck size={18} className="text-blue-400 fill-blue-400" color="white" />
+          </h2>
+          <span className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Washington, USA</span>
+        </div>
+        <button className="w-10 h-10 glass rounded-full flex items-center justify-center">
+          <Pencil size={18} className="text-white/60" />
+        </button>
+      </div>
+
+      {/* Main Profile Image */}
+      <div className="px-4 mb-8">
+        <div className="aspect-[4/5] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl relative">
+          <img src={user.imageUrl} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+        </div>
+      </div>
+
+      {/* About Section */}
+      <div className="px-8 space-y-8">
+        <div>
+          <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[2px] mb-3">About</h3>
+          <p className="text-white/70 font-medium leading-relaxed">
+            Hi there! 👋 I'm {user.age}, into coffee ☕, travel ✈️, and late-night talks ✨. Always open to new people and good vibes 🌍.
+          </p>
+        </div>
+
+        {/* Interests Tags */}
+        <div>
+          <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[2px] mb-3">Interests</h3>
+          <div className="flex flex-wrap gap-3">
+             {['Street Food', 'Books', 'Travel', 'Digital Art', 'Beach Time'].map((tag, i) => (
+               <div key={i} className="px-4 py-2 glass rounded-full flex items-center gap-2 text-[12px] font-bold text-white/80">
+                 {tag === 'Street Food' && '🍕'}
+                 {tag === 'Books' && '📚'}
+                 {tag === 'Travel' && '✈️'}
+                 {tag === 'Digital Art' && '🎨'}
+                 {tag === 'Beach Time' && '🏖️'}
+                 {tag}
+               </div>
+             ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-full bg-[#0a0a0a] select-none text-white">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        {view === 'intro' && renderIntro()}
+        {view === 'onboarding' && (
+           <div className="flex-1 flex flex-col p-8 bg-[#0a0a0a] items-center justify-center">
+              <Loader2 className="animate-spin text-orange-500 mb-4" size={48} />
+              <h2 className="text-2xl font-black">Syncing Profile...</h2>
+              <button onClick={() => setView('discovery')} className="mt-12 w-full py-5 bg-orange-600 rounded-full font-bold">Launch App</button>
+           </div>
+        )}
+        {view === 'discovery' && renderDiscovery()}
+        {view === 'matches' && (
+           <div className="flex-1 bg-[#0a0a0a] p-6 pt-12 overflow-y-auto">
+              <h1 className="text-3xl font-black mb-6">Messages</h1>
+              <div className="space-y-4">
+                {matches.map(m => (
+                  <div key={m.id} onClick={() => { setActiveMatch(m); setView('chat'); }} className="flex items-center gap-4 p-4 glass rounded-[32px]">
+                    <img src={m.user.imageUrl} className="w-14 h-14 rounded-2xl object-cover" />
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-bold">{m.user.name}</span>
+                        <span className="text-[10px] font-bold text-white/30">12:45 PM</span>
+                      </div>
+                      <p className="text-xs text-white/50 line-clamp-1">{m.lastMessage || 'Sent you a message'}</p>
                     </div>
                   </div>
                 ))}
-                {isTyping && (
-                  <div className="telegram-bubble bubble-in w-16 flex justify-center py-4">
-                    <div className="dot-flashing"></div>
-                  </div>
-                )}
-              </div>
-
-              <div className="p-2 bg-white flex gap-2 items-center safe-area-bottom">
-                <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Xabar..." className="flex-1 bg-gray-50 rounded-2xl px-4 py-3 text-[15px] focus:outline-none font-medium border border-gray-100" />
-                <button onClick={handleSendMessage} disabled={!chatMessage.trim() || isTyping} className="w-11 h-11 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-lg active:scale-90"><Send size={20} /></button>
               </div>
            </div>
         )}
+        {view === 'chat' && activeMatch && (
+           <div className="flex-1 flex flex-col bg-[#0a0a0a]">
+              {/* Simplified Chat UI for this design update */}
+              <div className="p-4 border-b border-white/5 flex items-center gap-3">
+                 <button onClick={() => setView('matches')} className="p-2"><X /></button>
+                 <img src={activeMatch.user.imageUrl} className="w-10 h-10 rounded-full" />
+                 <span className="font-bold">{activeMatch.user.name}</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+                {activeMatch.messages.map(msg => (
+                  <div key={msg.id} className={`${msg.senderId === 'user' ? 'self-end bg-orange-600' : 'self-start glass'} p-4 rounded-3xl max-w-[80%] text-sm font-medium`}>
+                    {msg.text}
+                  </div>
+                ))}
+              </div>
+              <div className="p-4 safe-area-bottom flex gap-2">
+                 <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} placeholder="Type a message..." className="flex-1 glass rounded-full px-6 py-4 outline-none border-none text-sm font-medium" />
+                 <button onClick={handleSendMessage} className="w-14 h-14 bg-orange-600 rounded-full flex items-center justify-center"><Send size={20} /></button>
+              </div>
+           </div>
+        )}
+        {view === 'profile' && renderProfile()}
       </main>
 
       {view !== 'chat' && view !== 'onboarding' && view !== 'intro' && (
-        <nav className="flex justify-around items-center py-5 bg-white border-t border-gray-100 safe-area-bottom z-40 shadow-[0_-5px_20px_rgba(0,0,0,0.02)]">
-          <button onClick={() => setView('discovery')} className={`p-2 transition-all ${view === 'discovery' ? 'text-blue-500 scale-110' : 'text-gray-300'}`}><Flame size={28} fill={view === 'discovery' ? 'currentColor' : 'none'} /></button>
-          <button onClick={() => setView('matches')} className={`p-2 transition-all relative ${view === 'matches' ? 'text-blue-500 scale-110' : 'text-gray-300'}`}>
-            <MessageCircle size={28} fill={view === 'matches' ? 'currentColor' : 'none'} />
-            {matches.some(m => m.messages.length === 0) && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-white"></span>}
-          </button>
-          <button onClick={() => setView('profile')} className={`p-2 transition-all ${view === 'profile' ? 'text-blue-500 scale-110' : 'text-gray-300'}`}><User size={28} fill={view === 'profile' ? 'currentColor' : 'none'} /></button>
-        </nav>
+        <div className="px-6 pb-8 safe-area-bottom">
+          <nav className="flex justify-around items-center h-16 glass rounded-full px-2">
+            <button onClick={() => setView('discovery')} className={`p-3 transition-all ${view === 'discovery' ? 'text-white' : 'text-white/30'}`}>
+              <Flame size={24} fill={view === 'discovery' ? 'currentColor' : 'none'} />
+            </button>
+            <button onClick={() => setView('discovery')} className={`p-3 transition-all ${view === 'discovery' ? 'text-white' : 'text-white/30'}`}>
+              <Heart size={24} />
+            </button>
+            <button onClick={() => setView('matches')} className={`p-3 transition-all ${view === 'matches' ? 'text-white' : 'text-white/30'}`}>
+              <MessageCircle size={24} fill={view === 'matches' ? 'currentColor' : 'none'} />
+            </button>
+            <button onClick={() => setView('profile')} className={`p-3 transition-all ${view === 'profile' ? 'text-white' : 'text-white/30'}`}>
+              <User size={24} fill={view === 'profile' ? 'currentColor' : 'none'} />
+            </button>
+          </nav>
+        </div>
       )}
 
       <AnimatePresence>
