@@ -5,9 +5,11 @@ export interface UserProfile {
   age: number;
   bio: string;
   imageUrl: string;
+  coverImageUrl?: string;
   interests: string[];
   location: string;
   distance: string;
+  isVerified?: boolean;
 }
 
 export interface UserAccount {
@@ -15,7 +17,9 @@ export interface UserAccount {
   age: number;
   bio: string;
   imageUrl: string;
+  coverImageUrl?: string;
   interests: string[];
+  isVerified?: boolean;
   location?: {
     lat: number;
     lng: number;

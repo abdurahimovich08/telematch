@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Flame, MessageCircle, User, Loader2, X, Heart, Star, Send, Sparkles, MapPin, RefreshCw, Settings, ShieldCheck, Zap, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Flame, MessageCircle, User, Loader2, X, Heart, Star, Send, Sparkles, MapPin, RefreshCw, Settings, ShieldCheck, Zap, ArrowRight, CheckCircle2, BadgeCheck, Share2, DollarSign, MoreHorizontal } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UserProfile, ViewState, Match, Message, UserAccount } from './types';
 import { generateAIProfiles, getAIReply, generateSmartBio, getCityName } from './geminiService';
@@ -32,8 +32,10 @@ const App: React.FC = () => {
       name: '',
       age: 21,
       bio: '',
-      imageUrl: 'https://picsum.photos/seed/telematch/400/400',
+      imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop',
+      coverImageUrl: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&auto=format&fit=crop',
       interests: [],
+      isVerified: true,
       settings: {
         minAge: 18,
         maxAge: 35,
@@ -50,6 +52,7 @@ const App: React.FC = () => {
   const [showMatchSplash, setShowMatchSplash] = useState<UserProfile | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [bioExpanded, setBioExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -71,7 +74,6 @@ const App: React.FC = () => {
         setUser(prev => ({
           ...prev,
           name: tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : ''),
-          imageUrl: tgUser.photo_url || prev.imageUrl,
         }));
       }
     }
@@ -255,20 +257,27 @@ const App: React.FC = () => {
       </div>
 
       <div className="space-y-6 pb-10">
-        <div className="flex flex-col items-center">
-          <div className="relative w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-2xl ring-4 ring-blue-50">
-            <img src={user.imageUrl} className="w-full h-full object-cover" />
-            <div className="absolute bottom-0 right-0 bg-blue-500 p-2 rounded-full border-2 border-white text-white">
-              <ShieldCheck size={16} />
+        <div className="flex flex-col items-center gap-4">
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avatar & Cover</div>
+            <div className="relative w-full h-40 rounded-3xl bg-gray-100 overflow-hidden border-2 border-dashed border-gray-200 group">
+                <img src={user.coverImageUrl} className="w-full h-full object-cover opacity-60" />
+                <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-[10px] font-black uppercase tracking-widest">Orqa fon rasmi</div>
+                <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-28 h-28 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-white">
+                    <img src={user.imageUrl} className="w-full h-full object-cover" />
+                </div>
             </div>
-          </div>
+            <div className="mt-12 text-xs font-bold text-blue-500 cursor-pointer">Rasmlarni o'zgartirish</div>
         </div>
 
         <div>
           <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">To'liq ism</label>
-          <div className="w-full px-5 py-4 bg-gray-50 rounded-2xl text-gray-900 font-bold border border-gray-100">
-            {user.name || 'Anonymous'}
-          </div>
+          <input 
+            type="text"
+            value={user.name}
+            onChange={e => setUser(prev => ({ ...prev, name: e.target.value }))}
+            className="w-full px-5 py-4 bg-gray-50 rounded-2xl text-gray-900 font-bold border border-gray-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+            placeholder="Ismingizni yozing..."
+          />
         </div>
 
         <div className="flex gap-4">
@@ -433,55 +442,91 @@ const App: React.FC = () => {
   );
 
   const renderProfile = () => (
-    <div className="flex-1 overflow-y-auto bg-gray-50 pb-20">
+    <div className="flex-1 overflow-y-auto bg-white pb-20">
+      {/* Upper Profile Section based on the provided image */}
       <div className="relative">
-        <img src={user.imageUrl} className="w-full aspect-square object-cover" />
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-gray-50 to-transparent"></div>
-        <button onClick={() => setShowSettings(!showSettings)} className="absolute top-6 right-6 p-3 bg-white/20 backdrop-blur-xl rounded-full text-white shadow-xl">
-          <Settings size={20} />
-        </button>
-        <div className="absolute bottom-8 left-8 text-gray-900">
-          <h1 className="text-4xl font-black tracking-tighter">{user.name}, {user.age}</h1>
-          <div className="flex items-center gap-1 font-black text-xs text-blue-600 uppercase tracking-widest mt-1">
-            <MapPin size={14} /> {user.location?.city || "Discovery Active"}
+        <div className="relative h-64 overflow-hidden">
+            <img src={user.coverImageUrl} className="w-full h-full object-cover scale-110 blur-[1px]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-white"></div>
+            
+            <div className="absolute top-6 left-6 flex items-center gap-3">
+                <button onClick={() => setView('discovery')} className="p-2.5 bg-white/20 backdrop-blur-xl rounded-full text-white shadow-xl hover:bg-white/40 transition-all">
+                    <ArrowRight className="rotate-180" size={18} />
+                </button>
+                <div className="text-white font-black text-sm tracking-widest drop-shadow-md">kristin_watson</div>
+            </div>
+
+            <button className="absolute top-6 right-6 p-2.5 bg-white/20 backdrop-blur-xl rounded-full text-white shadow-xl">
+                <MoreHorizontal size={20} />
+            </button>
+        </div>
+
+        <div className="flex flex-col items-center -mt-16 relative z-10">
+          <div className="relative w-36 h-36 rounded-full border-[6px] border-white shadow-2xl overflow-hidden bg-white">
+            <img src={user.imageUrl} className="w-full h-full object-cover" />
+          </div>
+          
+          <div className="mt-4 text-center">
+            <div className="flex items-center justify-center gap-1.5">
+                <h1 className="text-2xl font-black text-gray-900 tracking-tight">{user.name}</h1>
+                {user.isVerified && <BadgeCheck size={20} className="text-blue-500 fill-blue-500" strokeWidth={2.5} color="white" />}
+            </div>
+            <div className="flex items-center justify-center gap-1.5 mt-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Online</span>
+            </div>
           </div>
         </div>
       </div>
       
-      <div className="px-6 pb-6 space-y-6">
-        {showSettings ? (
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
-            <h3 className="font-black text-xs uppercase tracking-widest text-gray-400 mb-2">Qidiruv sozlamalari</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-black uppercase tracking-wider">
-                <span>Yosh oralig'i</span>
-                <span>{user.settings.minAge} - {user.settings.maxAge}</span>
-              </div>
-              <input 
-                type="range" 
-                min="18" max="60" 
-                value={user.settings.maxAge}
-                onChange={e => setUser(prev => ({ ...prev, settings: { ...prev.settings, maxAge: parseInt(e.target.value) } }))}
-                className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-              />
-            </div>
-            <button onClick={() => setShowSettings(false)} className="w-full py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest mt-4">Saqlash</button>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center">
-                <span className="text-3xl font-black text-gray-900">{matches.length}</span>
-                <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest mt-1">Mosliklar</span>
-              </div>
-              <div className="bg-gradient-to-br from-blue-600 to-blue-400 p-6 rounded-3xl shadow-lg flex flex-col items-center text-white">
-                <Zap size={24} fill="currentColor" className="mb-1" />
-                <span className="text-[10px] uppercase font-black tracking-widest">Profil Boost</span>
-              </div>
-            </div>
+      <div className="px-10 mt-6 text-center">
+        <p className={`text-sm font-medium text-gray-500 leading-relaxed ${bioExpanded ? '' : 'line-clamp-2'}`}>
+          {user.bio || "I'm a generous and lively girl, hope my enthusiasm can add more color to your life..."}
+        </p>
+        <button onClick={() => setBioExpanded(!bioExpanded)} className="mt-1 text-blue-600 font-black text-xs uppercase tracking-tighter">
+            {bioExpanded ? "Less" : "More"}
+        </button>
+      </div>
 
-            <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white text-gray-900 border-2 border-gray-100 rounded-3xl font-black shadow-sm active:scale-95 transition-all text-xs uppercase tracking-widest">Ma'lumotlarni tahrirlash</button>
-          </>
+      <div className="px-6 mt-8 flex items-center gap-3">
+        <button className="flex-1 py-4 bg-gray-50 rounded-2xl font-black text-gray-900 text-sm tracking-tight shadow-sm active:scale-95 transition-all">
+            Message
+        </button>
+        <button className="w-14 h-14 bg-white border border-gray-100 rounded-full flex items-center justify-center text-gray-900 shadow-sm active:scale-90 transition-all">
+            <DollarSign size={20} />
+        </button>
+        <button className="w-14 h-14 bg-white border border-gray-100 rounded-full flex items-center justify-center text-gray-900 shadow-sm active:scale-90 transition-all">
+            <Share2 size={20} />
+        </button>
+      </div>
+
+      <div className="px-6 mt-10 space-y-4">
+        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Profil sozlamalari</h3>
+        <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 active:scale-98 transition-all group">
+            <span className="font-bold text-gray-900 text-sm">Ma'lumotlarni tahrirlash</span>
+            <ArrowRight size={16} className="text-gray-300 group-hover:text-gray-900 transition-colors" />
+        </button>
+        <button onClick={() => setShowSettings(!showSettings)} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 active:scale-98 transition-all group">
+            <span className="font-bold text-gray-900 text-sm">Qidiruv filtrlari</span>
+            <Settings size={16} className="text-gray-300 group-hover:text-gray-900 transition-colors" />
+        </button>
+
+        {showSettings && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-50 rounded-2xl p-6 space-y-4 border border-gray-100">
+                <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-gray-400">
+                        <span>Yosh oralig'i</span>
+                        <span className="text-blue-600">{user.settings.minAge} - {user.settings.maxAge}</span>
+                    </div>
+                    <input 
+                        type="range" 
+                        min="18" max="60" 
+                        value={user.settings.maxAge}
+                        onChange={e => setUser(prev => ({ ...prev, settings: { ...prev.settings, maxAge: parseInt(e.target.value) } }))}
+                        className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+                    />
+                </div>
+            </motion.div>
         )}
       </div>
     </div>
@@ -489,7 +534,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {view !== 'intro' && view !== 'onboarding' && view !== 'chat' && (
+      {view !== 'intro' && view !== 'onboarding' && view !== 'chat' && view !== 'profile' && (
         <header className="px-6 py-5 flex justify-between items-center border-b bg-white z-40">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-gray-900 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-xl">TM</div>
