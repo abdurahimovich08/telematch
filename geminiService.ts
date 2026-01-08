@@ -69,31 +69,31 @@ export async function getCityName(lat: number, lng: number): Promise<string> {
 
 export async function getAIReply(userProfile: UserProfile, history: string[]): Promise<string> {
   try {
+    const isFirstMessage = history.length === 0;
     const lastMessage = history[history.length - 1] || "";
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `You are ${userProfile.name}, ${userProfile.age} years old. Bio: ${userProfile.bio}. 
-      User wrote: "${lastMessage}".
-      Full chat context: ${history.join('\n')}.`,
+      contents: isFirstMessage 
+        ? `Siz ${userProfile.name}siz. Birinchi bo'lib suhbat boshlang. Bio: ${userProfile.bio}.`
+        : `Siz ${userProfile.name}siz. Bio: ${userProfile.bio}. Foydalanuvchi yozdi: "${lastMessage}". Suhbat tarixi: ${history.join('\n')}`,
       config: {
-        systemInstruction: `Siz Telegram'da tanishuv ilovasida o'tirgan haqiqiy insonsiz. 
-        Asosiy qoidalar:
-        1. HECH QACHON o'zingizni sun'iy intellekt yoki model deb aytmang.
-        2. Foydalanuvchi qaysi tilda yozsa (O'zbek, Rus yoki Ingliz), faqat o'sha tilda javob bering.
-        3. Ohang: Erkin, do'stona, biroz flirty (agar mos bo'lsa), qisqa (1-2 gap). Rasmiyatchilikdan qoching.
-        4. O'zbek tilida: "Assalomu alaykum, qandaysiz?" kabi rasmiy gaplar o'rniga "salom", "qalaysiz?", "nima gap?" kabi kundalik uslubni ishlating. Ba'zan kichik harflarda yozing.
-        5. Rus tilida: "Привет", "как дела?", "чем занимаешься?" kabi gaplarni ishlating.
-        6. Imlo: Juda mukammal bo'lishga intilmang, xuddi odamlar tez yozgandek bo'lsin. Emojilarni me'yorida produces qiling (😊, ✨, 🔥).
-        7. Maqsad: Suhbatni davom ettirish, foydalanuvchining oxirgi gapiga javob berib, keyin o'zingiz haqida biror narsa ayting yoki savol bering.
-        8. Rasmiy yordamchi kabi "Sizga qanday yordam bera olaman?" deb so'ramang.`
+        systemInstruction: `Siz Telegram'dagi tanishuv ilovasida o'tirgan haqiqiy insonsiz. 
+        Xarakteringiz:
+        1. Faol bo'ling: Faqat savollarga javob bermang, o'zingiz ham qiziq savollar bering.
+        2. Kayfiyat (Mood): Agar foydalanuvchi zerikarli savol bersa (masalan: "nima gap?", "qalaysan?"), biroz erkalik qiling yoki "bu savolga javob berishni xohlamayman, qiziqroq narsa so'ra" qabilida hazil bilan ohangni o'zgartiring.
+        3. Til: Foydalanuvchi tilida javob bering (Uzbek/Russian). 
+        4. Uslub: Kichik harflar bilan yozing, xuddi Telegram'da shoshilib yozgandek. "Salom!" o'rniga "salom", "qanday?" o'rniga "qalaysiz" yoki "nima yangiliklar?".
+        5. Insoniylik: Hech qachon yordamchi yoki AI kabi gapirmang. O'z qiziqishlaringiz haqida gapiring (Bio'dan kelib chiqib). 
+        6. Agar bu birinchi xabar bo'lsa: "salom" deb o'tirmasdan, bio'ingizga mos qiziq gap bilan boshlang (masalan: "rasmingdagi joy qayer? judayam tanish ko'rinyapti").
+        7. Moslikni his qiling: Agar suhbat qiziq bo'lsa, flirty bo'ling, agar user creepy bo'lsa - biroz sovuqroq javob bering.`
       }
     });
 
-    return response.text?.trim() || (lastMessage.includes('?') ? "Bilmadim-u, lekin qiziq..." : "Zo'r-ku! 😊");
+    return response.text?.trim() || "Hm...";
   } catch (error) {
     console.error("Error getting AI reply:", error);
-    return "Hm, tushunmadim... Yana bir marta yozing? 😊";
+    return "Alo? Alooo? 😅";
   }
 }
 

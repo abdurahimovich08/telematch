@@ -88,6 +88,75 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Fix: Added missing image change handler
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        setUser(prev => ({
+          ...prev,
+          [type === 'avatar' ? 'imageUrl' : 'coverImageUrl']: result
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Fix: Added missing AI bio generation handler
+  const handleGenerateBio = async () => {
+    if (!user.name || user.interests.length === 0) {
+      if (tg?.showAlert) {
+        tg.showAlert("Iltimos, avval ismingiz va qiziqishlaringizni kiriting.");
+      } else {
+        alert("Iltimos, avval ismingiz va qiziqishlaringizni kiriting.");
+      }
+      return;
+    }
+    setIsGeneratingBio(true);
+    try {
+      const bio = await generateSmartBio(user.name, user.age, user.interests);
+      setUser(prev => ({ ...prev, bio }));
+    } catch (err) {
+      console.error("Bio generation failed", err);
+    } finally {
+      setIsGeneratingBio(false);
+    }
+  };
+
+  // Fix: Added missing location request handler
+  const handleLocationRequest = () => {
+    if (!navigator.geolocation) {
+      if (tg?.showAlert) {
+        tg.showAlert("Joylashuvni aniqlash brauzeringizda qo'llab-quvvatlanmaydi.");
+      } else {
+        alert("Joylashuvni aniqlash brauzeringizda qo'llab-quvvatlanmaydi.");
+      }
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      const { latitude, longitude } = position.coords;
+      try {
+        const city = await getCityName(latitude, longitude);
+        setUser(prev => ({
+          ...prev,
+          location: { lat: latitude, lng: longitude, city }
+        }));
+      } catch (err) {
+        console.error("Failed to get city name", err);
+      }
+    }, (error) => {
+      console.error("Error getting location:", error);
+      if (tg?.showAlert) {
+        tg.showAlert("Joylashuvni aniqlashda xatolik yuz berdi.");
+      } else {
+        alert("Joylashuvni aniqlashda xatolik yuz berdi.");
+      }
+    });
+  };
+
   const loadInitialProfiles = async () => {
     setIsLoading(true);
     const newProfiles = await generateAIProfiles(8, user);
@@ -95,54 +164,17 @@ const App: React.FC = () => {
     setIsLoading(false);
   };
 
-  const handleLocationRequest = () => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(async (position) => {
-        setIsLoading(true);
-        const city = await getCityName(position.coords.latitude, position.coords.longitude);
-        setUser(prev => ({
-          ...prev,
-          location: {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            city: city
-          }
-        }));
-        setIsLoading(false);
-      });
-    }
-  };
-
-  const handleGenerateBio = async () => {
-    if (!user.name || user.interests.length === 0) return;
-    setIsGeneratingBio(true);
-    const bio = await generateSmartBio(user.name, user.age, user.interests);
-    setUser(prev => ({ ...prev, bio }));
-    setIsGeneratingBio(false);
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        if (type === 'avatar') {
-          setUser(prev => ({ ...prev, imageUrl: base64String }));
-        } else {
-          setUser(prev => ({ ...prev, coverImageUrl: base64String }));
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const triggerMatchNotification = (profile: UserProfile) => {
-    setMatchNotification(profile);
-    if (tg?.HapticFeedback) {
-      tg.HapticFeedback.notificationOccurred('success');
-    }
-    setTimeout(() => setMatchNotification(null), 5000);
+  const triggerAIInitiation = async (matchId: string, profile: UserProfile) => {
+    // 2-3 soniya kutamiz, "tabiiy" bo'lishi uchun
+    setTimeout(async () => {
+      const firstReply = await getAIReply(profile, []);
+      const aiMsg: Message = { id: Date.now().toString(), senderId: profile.id, text: firstReply, timestamp: Date.now() };
+      
+      setMatches(prev => prev.map(m => m.id === matchId ? { ...m, messages: [aiMsg], lastMessage: firstReply } : m));
+      
+      // Agar foydalanuvchi hozir o'sha chatda bo'lsa, yangilaymiz
+      setActiveMatch(current => current?.id === matchId ? { ...current, messages: [aiMsg], lastMessage: firstReply } : current);
+    }, 2500);
   };
 
   const handleSwipe = useCallback(async (direction: 'left' | 'right') => {
@@ -154,21 +186,25 @@ const App: React.FC = () => {
     }
 
     if (direction === 'right' && Math.random() > 0.6) {
+      const matchId = `match-${Date.now()}`;
       const newMatch: Match = {
-        id: `match-${Date.now()}`,
+        id: matchId,
         user: swipedProfile,
         timestamp: Date.now(),
         messages: []
       };
       setMatches(prev => [newMatch, ...prev]);
       
-      // Tinder kabi Discovery vaqtida Splash-ni ko'rsatamiz
       if (view === 'discovery') {
         setShowMatchSplash(swipedProfile);
       } else {
-        // Agar boshqa sahifada bo'lsa, Notification chiqaramiz
-        triggerMatchNotification(swipedProfile);
+        setMatchNotification(swipedProfile);
+        if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        setTimeout(() => setMatchNotification(null), 5000);
       }
+
+      // AI birinchi bo'lib yozishini boshlaymiz
+      triggerAIInitiation(matchId, swipedProfile);
     }
 
     setProfiles(prev => prev.slice(1));
@@ -197,6 +233,12 @@ const App: React.FC = () => {
     setMatches(prev => prev.map(m => m.id === activeMatch.id ? finalMatch : m));
     setActiveMatch(finalMatch);
   };
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [activeMatch?.messages]);
 
   const renderIntro = () => {
     const slides = [
@@ -520,29 +562,24 @@ const App: React.FC = () => {
 
   const renderProfile = () => (
     <div className="flex-1 overflow-y-auto bg-white pb-20">
-      {/* Upper Profile Section based on the provided image */}
       <div className="relative">
         <div className="relative h-64 overflow-hidden">
             <img src={user.coverImageUrl} className="w-full h-full object-cover scale-110 blur-[1px]" />
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-white"></div>
-            
             <div className="absolute top-6 left-6 flex items-center gap-3">
                 <button onClick={() => setView('discovery')} className="p-2.5 bg-white/20 backdrop-blur-xl rounded-full text-white shadow-xl hover:bg-white/40 transition-all">
                     <ArrowRight className="rotate-180" size={18} />
                 </button>
                 <div className="text-white font-black text-sm tracking-widest drop-shadow-md">{user.name.toLowerCase().replace(/\s+/g, '_')}</div>
             </div>
-
             <button className="absolute top-6 right-6 p-2.5 bg-white/20 backdrop-blur-xl rounded-full text-white shadow-xl">
                 <MoreHorizontal size={20} />
             </button>
         </div>
-
         <div className="flex flex-col items-center -mt-16 relative z-10">
           <div className="relative w-36 h-36 rounded-full border-[6px] border-white shadow-2xl overflow-hidden bg-white">
             <img src={user.imageUrl} className="w-full h-full object-cover" />
           </div>
-          
           <div className="mt-4 text-center">
             <div className="flex items-center justify-center gap-1.5">
                 <h1 className="text-2xl font-black text-gray-900 tracking-tight">{user.name}</h1>
@@ -555,7 +592,6 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
-      
       <div className="px-10 mt-6 text-center">
         <p className={`text-sm font-medium text-gray-500 leading-relaxed ${bioExpanded ? '' : 'line-clamp-2'}`}>
           {user.bio || "Salom! Men yangi insonlar bilan tanishishni yaxshi ko'raman."}
@@ -564,7 +600,6 @@ const App: React.FC = () => {
             {bioExpanded ? "Less" : "More"}
         </button>
       </div>
-
       <div className="px-6 mt-8 flex items-center gap-3">
         <button onClick={() => setView('matches')} className="flex-1 py-4 bg-gray-50 rounded-2xl font-black text-gray-900 text-sm tracking-tight shadow-sm active:scale-95 transition-all">
             Message
@@ -576,7 +611,6 @@ const App: React.FC = () => {
             <Share2 size={20} />
         </button>
       </div>
-
       <div className="px-6 mt-10 space-y-4">
         <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Profil sozlamalari</h3>
         <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 active:scale-98 transition-all group">
@@ -587,7 +621,6 @@ const App: React.FC = () => {
             <span className="font-bold text-gray-900 text-sm">Qidiruv filtrlari</span>
             <Settings size={16} className="text-gray-300 group-hover:text-gray-900 transition-colors" />
         </button>
-
         {showSettings && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-50 rounded-2xl p-6 space-y-4 border border-gray-100">
                 <div className="space-y-2">
@@ -611,7 +644,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Match Notification Toast */}
       <AnimatePresence>
         {matchNotification && (
           <motion.div
