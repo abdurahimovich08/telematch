@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Flame, MessageCircle, User, Loader2, X, Heart, Send, Sparkles, MapPin, RefreshCw, Settings, ArrowRight, BadgeCheck, Camera, ExternalLink, Bell, ShieldCheck, Gift, Search, Pencil, ChevronRight } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
 import { UserProfile, ViewState, Match, Message, UserAccount } from './types';
 import { generateAIProfiles, getAIReply, generateSmartBio, getCityName } from './geminiService';
 import Card from './components/Card';
@@ -31,11 +31,11 @@ const App: React.FC = () => {
 
     return {
       id: tgUser?.id?.toString() || 'guest',
-      name: tgUser?.first_name || (initialUser?.name || ''),
+      name: tgUser?.first_name || (initialUser?.name || 'Foydalanuvchi'),
       age: initialUser?.age || 21,
       bio: initialUser?.bio || '',
       imageUrl: telegramPhoto,
-      interests: initialUser?.interests || ['Coffee', 'Travel', 'Art'],
+      interests: initialUser?.interests || ['Qahva', 'Sayohat', 'San\'at'],
       isVerified: true,
       settings: initialUser?.settings || { minAge: 18, maxAge: 35, distanceLimit: 25, discoveryActive: true },
       onboarded: initialUser?.onboarded || false,
@@ -49,6 +49,12 @@ const App: React.FC = () => {
   const [showMatchSplash, setShowMatchSplash] = useState<UserProfile | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Swipe logic for intro button
+  const swipeX = useMotionValue(0);
+  const buttonWidth = 320; // approximate
+  const heartScale = useTransform(swipeX, [0, 200], [1, 1.2]);
+  const textOpacity = useTransform(swipeX, [0, 100], [1, 0]);
 
   useEffect(() => {
     if (tg) {
@@ -112,7 +118,6 @@ const App: React.FC = () => {
 
   const renderIntro = () => (
     <div className="flex-1 flex flex-col bg-[#0a0a0a] relative grid-bg overflow-hidden px-8 pb-10 pt-16">
-      {/* Design Color Constants */}
       <style>{`
         :root {
           --design-orange: #ff541c;
@@ -122,16 +127,13 @@ const App: React.FC = () => {
         }
       `}</style>
 
-      {/* Connexa Logo */}
       <div className="absolute top-14 left-0 right-0 text-center z-50">
-        <span className="text-white font-[800] text-xl tracking-tight">Connexa</span>
+        <span className="text-white font-[800] text-xl tracking-tight">TeleMatch</span>
       </div>
 
-      {/* Stacked Cards Section */}
       <div className="flex-1 relative flex flex-col items-center justify-center mt-4">
         <div className="relative w-full aspect-[4/5] flex items-center justify-center">
           
-          {/* Back Card (Jastin) */}
           <motion.div 
             initial={{ rotate: -8, x: -45, y: -20, opacity: 0 }}
             animate={{ rotate: -8, x: -45, y: -20, opacity: 1 }}
@@ -141,11 +143,10 @@ const App: React.FC = () => {
             <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400" className="w-full h-full object-cover grayscale-[0.1]" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
             <div className="absolute bottom-6 left-6 text-white text-[12px]">
-              <div className="font-[800]">Jastin, 24</div>
-              <div className="text-[10px] opacity-60">New York</div>
+              <div className="font-[800]">Jasur, 24</div>
+              <div className="text-[10px] opacity-60">Toshkent</div>
             </div>
             
-            {/* Gift Icon Overlay */}
             <motion.div 
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -156,7 +157,6 @@ const App: React.FC = () => {
             </motion.div>
           </motion.div>
           
-          {/* Front Card (Julia) */}
           <motion.div 
             initial={{ rotate: 8, x: 40, y: 15, opacity: 0 }}
             animate={{ rotate: 8, x: 40, y: 15, opacity: 1 }}
@@ -166,11 +166,10 @@ const App: React.FC = () => {
             <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
             <div className="absolute bottom-6 left-6 text-white text-[12px]">
-              <div className="font-[800]">Julia Lode, 27</div>
-              <div className="text-[10px] opacity-60">Los Angeles</div>
+              <div className="font-[800]">Laylo, 27</div>
+              <div className="text-[10px] opacity-60">Samarqand</div>
             </div>
 
-            {/* Message Icon Overlay */}
             <motion.div 
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -180,7 +179,6 @@ const App: React.FC = () => {
               <Send size={20} className="text-white" fill="white" />
             </motion.div>
 
-            {/* Heart Icon Overlay */}
             <motion.div 
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -194,54 +192,64 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Hero Text */}
       <div className="text-center mt-2 mb-6">
-        <h1 className="text-[44px] font-[900] leading-[1.05] tracking-tight text-white mb-6">
-          Find Your <br />
-          <span className="text-[var(--design-orange)]">Perfect</span> Match
+        <h1 className="text-[38px] font-[900] leading-[1.05] tracking-tight text-white mb-6">
+          Mukammal juftingizni <br />
+          <span className="text-[var(--design-orange)]">Toping</span>
         </h1>
         <p className="text-white/40 text-[14px] leading-relaxed font-medium">
-          Meet New People, Spark Real Connections, <br /> And See Where It Goes.
+          Yangi insonlar bilan tanishing, haqiqiy aloqalarni <br /> o'rnating va bu qayerga olib borishini ko'ring.
         </p>
       </div>
 
-      {/* Custom design Get Started Button */}
-      <div className="mt-auto pt-4">
-        <button 
-          onClick={() => setView('onboarding')} 
-          className="w-full h-[84px] bg-[#222222] rounded-full flex items-center justify-between p-2.5 active:scale-[0.97] transition-all group"
-        >
-          {/* Left Heart Circle */}
-          <div className="w-[64px] h-[64px] bg-[var(--design-orange)] rounded-full flex items-center justify-center shadow-lg shadow-orange-900/40">
+      <div className="mt-auto pt-4 flex justify-center">
+        <div className="relative w-full h-[84px] bg-[#222222] rounded-full flex items-center p-2.5 overflow-hidden">
+          <motion.div
+            style={{ x: swipeX, scale: heartScale }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 230 }}
+            dragElastic={0.1}
+            onDragEnd={(_, info) => {
+              if (info.offset.x > 180) {
+                if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                setView('onboarding');
+              } else {
+                swipeX.set(0);
+              }
+            }}
+            className="w-[64px] h-[64px] bg-[var(--design-orange)] rounded-full flex items-center justify-center shadow-lg shadow-orange-900/40 z-20 cursor-grab active:cursor-grabbing"
+          >
             <Heart size={24} className="text-white" fill="white" />
-          </div>
+          </motion.div>
+
+          <motion.div 
+            style={{ opacity: textOpacity }}
+            className="absolute left-0 right-0 text-center pointer-events-none"
+          >
+            <span className="text-white font-[800] text-lg tracking-tight ml-12">Boshlash uchun suring</span>
+          </motion.div>
           
-          {/* Center Text */}
-          <span className="text-white font-[800] text-lg tracking-tight ml-4">Get Started</span>
-          
-          {/* Right Arrows */}
-          <div className="flex items-center gap-0 px-4">
-            <ChevronRight size={22} className="text-white/20 -mr-3" strokeWidth={3} />
-            <ChevronRight size={22} className="text-white/40 -mr-3" strokeWidth={3} />
-            <ChevronRight size={22} className="text-white/80" strokeWidth={3} />
+          <div className="ml-auto flex items-center gap-0 px-4 opacity-30">
+            <ChevronRight size={22} className="text-white -mr-3" strokeWidth={3} />
+            <ChevronRight size={22} className="text-white -mr-3" strokeWidth={3} />
+            <ChevronRight size={22} className="text-white" strokeWidth={3} />
           </div>
-        </button>
+        </div>
       </div>
     </div>
   );
 
   const renderDiscovery = () => (
     <div className="flex-1 flex flex-col bg-[#0a0a0a] relative overflow-hidden">
-      {/* Top Header */}
       <div className="flex items-center justify-between px-6 pt-12 pb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full overflow-hidden border border-white/20">
             <img src={user.imageUrl} className="w-full h-full object-cover" />
           </div>
           <div className="flex flex-col">
-            <span className="text-white/40 text-[10px] font-bold uppercase tracking-wider">Hello {user.name}!</span>
+            <span className="text-white/40 text-[10px] font-bold uppercase tracking-wider">Salom {user.name}!</span>
             <div className="flex items-center gap-1 text-white text-xs font-bold">
-               <MapPin size={12} className="text-orange-500" /> Washington, USA
+               <MapPin size={12} className="text-orange-500" /> Toshkent, O'zb
             </div>
           </div>
         </div>
@@ -250,7 +258,6 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Card Container */}
       <div className="flex-1 px-4 relative mt-2">
         {profiles.length > 0 ? (
           <AnimatePresence mode="popLayout">
@@ -261,12 +268,11 @@ const App: React.FC = () => {
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-white/20">
             <Loader2 className="animate-spin mb-4" size={48} />
-            <p className="font-bold uppercase tracking-widest text-xs">Finding matches...</p>
+            <p className="font-bold uppercase tracking-widest text-xs">Juftliklar qidirilmoqda...</p>
           </div>
         )}
       </div>
 
-      {/* Action Buttons */}
       <div className="flex justify-center items-center gap-4 py-8 relative z-20">
         <button onClick={() => handleSwipe('left')} className="w-16 h-16 rounded-full glass flex items-center justify-center active:scale-75 transition-transform">
           <X size={32} className="text-orange-500" />
@@ -283,7 +289,6 @@ const App: React.FC = () => {
 
   const renderProfile = () => (
     <div className="flex-1 overflow-y-auto bg-[#0a0a0a] pb-24">
-      {/* Header Info */}
       <div className="px-6 pt-12 flex items-center justify-between mb-6">
         <button className="w-10 h-10 glass rounded-full flex items-center justify-center">
           <Settings size={20} className="text-white/60" />
@@ -293,14 +298,13 @@ const App: React.FC = () => {
             {user.name}, {user.age}
             <BadgeCheck size={18} className="text-blue-400 fill-blue-400" color="white" />
           </h2>
-          <span className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Washington, USA</span>
+          <span className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Toshkent, O'zbekiston</span>
         </div>
         <button className="w-10 h-10 glass rounded-full flex items-center justify-center">
           <Pencil size={18} className="text-white/60" />
         </button>
       </div>
 
-      {/* Main Profile Image */}
       <div className="px-4 mb-8">
         <div className="aspect-[4/5] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl relative">
           <img src={user.imageUrl} className="w-full h-full object-cover" />
@@ -308,26 +312,24 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* About Section */}
       <div className="px-8 space-y-8">
         <div>
-          <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[2px] mb-3">About</h3>
+          <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[2px] mb-3">Men haqimda</h3>
           <p className="text-white/70 font-medium leading-relaxed">
-            Hi there! 👋 I'm {user.age}, into coffee ☕, travel ✈️, and late-night talks ✨. Always open to new people and good vibes 🌍.
+            Salom! 👋 Men {user.name}man. Qahva ☕, sayohat ✈️ va tungi suhbatlarni ✨ yaxshi ko'raman. Har doim yangi insonlar va ijobiy energiya 🌍 uchun ochiqman.
           </p>
         </div>
 
-        {/* Interests Tags */}
         <div>
-          <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[2px] mb-3">Interests</h3>
+          <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[2px] mb-3">Qiziqishlar</h3>
           <div className="flex flex-wrap gap-3">
-             {['Street Food', 'Books', 'Travel', 'Digital Art', 'Beach Time'].map((tag, i) => (
+             {['Street Food', 'Kitoblar', 'Sayohat', 'Raqamli san\'at', 'Plyaj'].map((tag, i) => (
                <div key={i} className="px-4 py-2 glass rounded-full flex items-center gap-2 text-[12px] font-bold text-white/80">
                  {tag === 'Street Food' && '🍕'}
-                 {tag === 'Books' && '📚'}
-                 {tag === 'Travel' && '✈️'}
-                 {tag === 'Digital Art' && '🎨'}
-                 {tag === 'Beach Time' && '🏖️'}
+                 {tag === 'Kitoblar' && '📚'}
+                 {tag === 'Sayohat' && '✈️'}
+                 {tag === 'Raqamli san\'at' && '🎨'}
+                 {tag === 'Plyaj' && '🏖️'}
                  {tag}
                </div>
              ))}
@@ -344,14 +346,14 @@ const App: React.FC = () => {
         {view === 'onboarding' && (
            <div className="flex-1 flex flex-col p-8 bg-[#0a0a0a] items-center justify-center">
               <Loader2 className="animate-spin text-orange-500 mb-4" size={48} />
-              <h2 className="text-2xl font-black">Syncing Profile...</h2>
-              <button onClick={() => setView('discovery')} className="mt-12 w-full py-5 bg-orange-600 rounded-full font-bold">Launch App</button>
+              <h2 className="text-2xl font-black">Profil yuklanmoqda...</h2>
+              <button onClick={() => { setUser(prev => ({ ...prev, onboarded: true })); setView('discovery'); loadInitialProfiles(); }} className="mt-12 w-full py-5 bg-orange-600 rounded-full font-bold">Ilovani ishga tushirish</button>
            </div>
         )}
         {view === 'discovery' && renderDiscovery()}
         {view === 'matches' && (
            <div className="flex-1 bg-[#0a0a0a] p-6 pt-12 overflow-y-auto">
-              <h1 className="text-3xl font-black mb-6">Messages</h1>
+              <h1 className="text-3xl font-black mb-6">Xabarlar</h1>
               <div className="space-y-4">
                 {matches.map(m => (
                   <div key={m.id} onClick={() => { setActiveMatch(m); setView('chat'); }} className="flex items-center gap-4 p-4 glass rounded-[32px]">
@@ -359,20 +361,25 @@ const App: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex justify-between items-center mb-1">
                         <span className="font-bold">{m.user.name}</span>
-                        <span className="text-[10px] font-bold text-white/30">12:45 PM</span>
+                        <span className="text-[10px] font-bold text-white/30">Bugun</span>
                       </div>
-                      <p className="text-xs text-white/50 line-clamp-1">{m.lastMessage || 'Sent you a message'}</p>
+                      <p className="text-xs text-white/50 line-clamp-1">{m.lastMessage || 'Sizga xabar yubordi'}</p>
                     </div>
                   </div>
                 ))}
+                {matches.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-20 text-white/20">
+                    <MessageCircle size={64} className="mb-4" />
+                    <p className="font-bold">Hozircha xabarlar yo'q</p>
+                  </div>
+                )}
               </div>
            </div>
         )}
         {view === 'chat' && activeMatch && (
            <div className="flex-1 flex flex-col bg-[#0a0a0a]">
-              {/* Simplified Chat UI for this design update */}
               <div className="p-4 border-b border-white/5 flex items-center gap-3">
-                 <button onClick={() => setView('matches')} className="p-2"><X /></button>
+                 <button onClick={() => setView('matches')} className="p-2"><ChevronRight className="rotate-180" /></button>
                  <img src={activeMatch.user.imageUrl} className="w-10 h-10 rounded-full" />
                  <span className="font-bold">{activeMatch.user.name}</span>
               </div>
@@ -382,10 +389,16 @@ const App: React.FC = () => {
                     {msg.text}
                   </div>
                 ))}
+                {isTyping && (
+                  <div className="self-start glass p-3 rounded-2xl text-[10px] text-white/40 animate-pulse">
+                    yozilmoqda...
+                  </div>
+                )}
+                <div ref={scrollRef} />
               </div>
               <div className="p-4 safe-area-bottom flex gap-2">
-                 <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} placeholder="Type a message..." className="flex-1 glass rounded-full px-6 py-4 outline-none border-none text-sm font-medium" />
-                 <button onClick={handleSendMessage} className="w-14 h-14 bg-orange-600 rounded-full flex items-center justify-center"><Send size={20} /></button>
+                 <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Xabar yozing..." className="flex-1 glass rounded-full px-6 py-4 outline-none border-none text-sm font-medium" />
+                 <button onClick={handleSendMessage} disabled={!chatMessage.trim()} className="w-14 h-14 bg-orange-600 rounded-full flex items-center justify-center disabled:opacity-50"><Send size={20} /></button>
               </div>
            </div>
         )}

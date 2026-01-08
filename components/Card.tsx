@@ -2,7 +2,7 @@
 import React from 'react';
 import { motion, PanInfo, useMotionValue, useTransform } from 'framer-motion';
 import { UserProfile } from '../types';
-import { MapPin, BadgeCheck } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 
 interface CardProps {
   profile: UserProfile;
@@ -34,7 +34,7 @@ const Card: React.FC<CardProps> = ({ profile, onSwipe, isTop }) => {
       
       {/* Match Percentage Badge */}
       <div className="absolute top-6 left-6 glass px-4 py-2 rounded-full text-[12px] font-bold text-white z-20">
-        Match {matchPercent}%
+        Moslik {matchPercent}%
       </div>
 
       {/* Info Overlay */}
@@ -46,7 +46,7 @@ const Card: React.FC<CardProps> = ({ profile, onSwipe, isTop }) => {
           </h2>
           <div className="flex items-center gap-1.5 opacity-70 text-sm font-medium">
             <MapPin size={16} className="text-white/60" />
-            <span>{profile.city || profile.location}</span>
+            <span>{profile.city || profile.location || 'Toshkent'}</span>
           </div>
         </div>
       </div>
