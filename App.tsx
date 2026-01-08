@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Flame, MessageCircle, User, Loader2, X, Heart, Send, Sparkles, MapPin, RefreshCw, Settings, ArrowRight, BadgeCheck, Camera } from 'lucide-react';
+import { Flame, MessageCircle, User, Loader2, X, Heart, Send, Sparkles, MapPin, RefreshCw, Settings, ArrowRight, BadgeCheck, Camera, MoreHorizontal } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UserProfile, ViewState, Match, Message, UserAccount } from './types';
 import { generateAIProfiles, getAIReply, generateSmartBio, getCityName } from './geminiService';
@@ -30,7 +31,6 @@ const App: React.FC = () => {
     const saved = localStorage.getItem(STORAGE_KEY_USER);
     const initialUser = saved ? JSON.parse(saved) : null;
     
-    // Telegram rasm manzili yoki fallback
     const telegramPhoto = tgUser?.photo_url || `https://ui-avatars.com/api/?name=${tgUser?.first_name || 'User'}&background=random&size=512`;
 
     return {
@@ -38,7 +38,7 @@ const App: React.FC = () => {
       name: tgUser?.first_name || (initialUser?.name || ''),
       age: initialUser?.age || 21,
       bio: initialUser?.bio || '',
-      imageUrl: telegramPhoto, // Har doim Telegram'dan olinadi
+      imageUrl: telegramPhoto,
       coverImageUrl: initialUser?.coverImageUrl || 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&auto=format&fit=crop',
       interests: initialUser?.interests || [],
       isVerified: true,
@@ -57,13 +57,13 @@ const App: React.FC = () => {
   const [activeMatch, setActiveMatch] = useState<Match | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingBio, setIsGeneratingBio] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [showMatchSplash, setShowMatchSplash] = useState<UserProfile | null>(null);
   const [matchNotification, setMatchNotification] = useState<UserProfile | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Sync with Telegram photo on every load
   useEffect(() => {
     if (tgUser?.photo_url && tgUser.photo_url !== user.imageUrl) {
       setUser(prev => ({ ...prev, imageUrl: tgUser.photo_url }));
@@ -107,7 +107,6 @@ const App: React.FC = () => {
   const loadInitialProfiles = async () => {
     setIsLoading(true);
     const aiProfiles = await generateAIProfiles(8, user);
-    
     const simulatedRealProfiles: UserProfile[] = [
       {
         id: 'real-1',
@@ -138,12 +137,10 @@ const App: React.FC = () => {
         lastSeen: Date.now() - 120000,
       }
     ];
-
     const allProfiles = [...aiProfiles, ...simulatedRealProfiles];
     const scoredProfiles = allProfiles
       .map(p => ({ ...p, score: scoreProfile(p) }))
       .sort((a, b) => (b.score || 0) - (a.score || 0));
-
     setProfiles(scoredProfiles);
     setIsLoading(false);
   };
@@ -170,7 +167,9 @@ const App: React.FC = () => {
 
   const triggerAIInitiation = async (matchId: string, profile: UserProfile) => {
     setTimeout(async () => {
+      setIsTyping(true);
       const firstReply = await getAIReply(profile, []);
+      setIsTyping(false);
       const aiMsg: Message = { id: Date.now().toString(), senderId: profile.id, text: firstReply, timestamp: Date.now() };
       setMatches(prev => prev.map(m => m.id === matchId ? { ...m, messages: [aiMsg], lastMessage: firstReply } : m));
       setActiveMatch(current => current?.id === matchId ? { ...current, messages: [aiMsg], lastMessage: firstReply } : current);
@@ -180,28 +179,23 @@ const App: React.FC = () => {
   const handleSwipe = useCallback(async (direction: 'left' | 'right') => {
     const swipedProfile = profiles[0];
     if (!swipedProfile) return;
-
     if (tg?.HapticFeedback) {
       tg.HapticFeedback.impactOccurred(direction === 'right' ? 'medium' : 'light');
     }
-
     if (direction === 'right' && (swipedProfile.type === 'ai' || Math.random() > 0.5)) {
       const matchId = `match-${Date.now()}`;
       const newMatch: Match = { id: matchId, user: swipedProfile, timestamp: Date.now(), messages: [] };
       setMatches(prev => [newMatch, ...prev]);
-      
       if (view === 'discovery') {
         setShowMatchSplash(swipedProfile);
       } else {
         setMatchNotification(swipedProfile);
         setTimeout(() => setMatchNotification(null), 5000);
       }
-
       if (swipedProfile.type === 'ai') {
         triggerAIInitiation(matchId, swipedProfile);
       }
     }
-
     setProfiles(prev => prev.slice(1));
     if (profiles.length < 4) {
       const more = await generateAIProfiles(5, user);
@@ -218,19 +212,27 @@ const App: React.FC = () => {
     setMatches(prev => prev.map(m => m.id === currentMatchId ? updatedMatch : m));
     setActiveMatch(updatedMatch);
     setChatMessage('');
+    
     if (activeMatch.user.type === 'ai') {
+      setIsTyping(true);
       const history = updatedMatch.messages.map(m => `${m.senderId === 'user' ? 'User' : m.senderId}: ${m.text}`);
       const replyText = await getAIReply(activeMatch.user, history);
-      const aiMsg: Message = { id: (Date.now() + 1).toString(), senderId: activeMatch.user.id, text: replyText, timestamp: Date.now() };
-      const finalMatch = { ...updatedMatch, messages: [...updatedMatch.messages, aiMsg], lastMessage: replyText };
-      setMatches(prev => prev.map(m => m.id === currentMatchId ? finalMatch : m));
-      setActiveMatch(current => current?.id === currentMatchId ? finalMatch : current);
+      
+      // Simulate human-like thinking delay proportional to text length
+      const thinkingDelay = Math.min(3000, Math.max(1000, replyText.length * 20));
+      setTimeout(() => {
+        setIsTyping(false);
+        const aiMsg: Message = { id: (Date.now() + 1).toString(), senderId: activeMatch.user.id, text: replyText, timestamp: Date.now() };
+        const finalMatch = { ...updatedMatch, messages: [...updatedMatch.messages, aiMsg], lastMessage: replyText };
+        setMatches(prev => prev.map(m => m.id === currentMatchId ? finalMatch : m));
+        setActiveMatch(current => current?.id === currentMatchId ? finalMatch : current);
+      }, thinkingDelay);
     }
   };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [activeMatch?.messages]);
+  }, [activeMatch?.messages, isTyping]);
 
   const renderIntro = () => (
     <div className="flex-1 flex flex-col bg-white overflow-hidden">
@@ -393,8 +395,6 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Storylar Bo'limi (Telegram Style) */}
       <div className="px-6 mt-8">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hikoyalar (Stories)</h3>
@@ -412,11 +412,9 @@ const App: React.FC = () => {
           ))}
         </div>
       </div>
-
       <div className="px-10 mt-6 text-center text-sm text-gray-500 leading-relaxed italic">
         "{user.bio || "Salom! Men yangi insonlar bilan tanishishga tayyorman."}"
       </div>
-
       <div className="px-6 mt-8 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="p-4 bg-gray-50 rounded-3xl border border-gray-100 text-center">
@@ -428,7 +426,6 @@ const App: React.FC = () => {
             <div className="text-[10px] font-black text-gray-400 uppercase">Ko'rilgan</div>
           </div>
         </div>
-        
         <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 font-bold text-gray-900 text-sm active:scale-95 transition-all">
             Profilni tahrirlash (Yosh/Bio) <ArrowRight size={16} />
         </button>
@@ -448,6 +445,46 @@ const App: React.FC = () => {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        .dot-flashing {
+          position: relative;
+          width: 6px;
+          height: 6px;
+          border-radius: 5px;
+          background-color: #94a3b8;
+          color: #94a3b8;
+          animation: dot-flashing 1s infinite linear alternate;
+          animation-delay: 0.5s;
+        }
+        .dot-flashing::before, .dot-flashing::after {
+          content: "";
+          display: inline-block;
+          position: absolute;
+          top: 0;
+        }
+        .dot-flashing::before {
+          left: -12px;
+          width: 6px;
+          height: 6px;
+          border-radius: 5px;
+          background-color: #94a3b8;
+          color: #94a3b8;
+          animation: dot-flashing 1s infinite alternate;
+          animation-delay: 0s;
+        }
+        .dot-flashing::after {
+          left: 12px;
+          width: 6px;
+          height: 6px;
+          border-radius: 5px;
+          background-color: #94a3b8;
+          color: #94a3b8;
+          animation: dot-flashing 1s infinite alternate;
+          animation-delay: 1s;
+        }
+        @keyframes dot-flashing {
+          0% { background-color: #94a3b8; }
+          50%, 100% { background-color: #e2e8f0; }
         }
       `}</style>
       <AnimatePresence>
@@ -475,9 +512,15 @@ const App: React.FC = () => {
         {view === 'chat' && (
           <div className="flex-1 flex flex-col bg-white">
             <div className="flex items-center gap-3 p-4 border-b bg-white z-10">
-              <button onClick={() => setView('matches')} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
-              <img src={activeMatch?.user.imageUrl} className="w-12 h-12 rounded-2xl object-cover shadow-md" />
-              <div className="font-black text-sm text-gray-900 uppercase tracking-tight">{activeMatch?.user.name}</div>
+              <button onClick={() => { setView('matches'); setIsTyping(false); }} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
+              <div className="relative">
+                <img src={activeMatch?.user.imageUrl} className="w-12 h-12 rounded-2xl object-cover shadow-md" />
+                {activeMatch?.user.type === 'real' && <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>}
+              </div>
+              <div className="flex flex-col">
+                <div className="font-black text-sm text-gray-900 uppercase tracking-tight leading-none">{activeMatch?.user.name}</div>
+                {isTyping && <div className="text-[10px] font-bold text-blue-500 animate-pulse mt-0.5">yozmoqda...</div>}
+              </div>
             </div>
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
               {activeMatch?.messages.map(msg => (
@@ -487,10 +530,17 @@ const App: React.FC = () => {
                   </div>
                 </div>
               ))}
+              {isTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-white px-8 py-5 rounded-2xl rounded-tl-none border border-gray-100 shadow-sm flex items-center justify-center">
+                    <div className="dot-flashing"></div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="p-4 border-t flex gap-2 items-center bg-white safe-area-bottom">
               <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Xabar..." className="flex-1 bg-gray-100 rounded-full px-6 py-4 text-sm focus:outline-none font-bold border-none" />
-              <button onClick={handleSendMessage} disabled={!chatMessage.trim()} className="w-14 h-14 rounded-full bg-gray-900 text-white flex items-center justify-center shadow-xl disabled:bg-gray-200 transition-all active:scale-90"><Send size={22} /></button>
+              <button onClick={handleSendMessage} disabled={!chatMessage.trim() || isTyping} className="w-14 h-14 rounded-full bg-gray-900 text-white flex items-center justify-center shadow-xl disabled:bg-gray-200 transition-all active:scale-90"><Send size={22} /></button>
             </div>
           </div>
         )}
