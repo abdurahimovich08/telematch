@@ -1,31 +1,36 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, UserAccount } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const PROFILE_SCHEMA = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      name: { type: Type.STRING },
-      age: { type: Type.INTEGER },
-      bio: { type: Type.STRING },
-      interests: { 
-        type: Type.ARRAY,
-        items: { type: Type.STRING }
-      },
-      location: { type: Type.STRING },
-      distance: { type: Type.STRING },
-      distanceKm: { type: Type.NUMBER }
-    },
-    required: ["name", "age", "bio", "interests", "location", "distance", "distanceKm"]
-  }
+  type: Type.OBJECT,
+  properties: {
+    profiles: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          age: { type: Type.INTEGER },
+          bio: { type: Type.STRING },
+          interests: { 
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          },
+          location: { type: Type.STRING },
+          distance: { type: Type.STRING },
+          distanceKm: { type: Type.NUMBER }
+        },
+        required: ["name", "age", "bio", "interests", "location", "distance", "distanceKm"]
+      }
+    }
+  },
+  required: ["profiles"]
 };
 
 export async function generateAIProfiles(count: number = 5, userContext?: UserAccount): Promise<UserProfile[]> {
   try {
+    // Initialize inside the function as per best practices
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const userInterests = userContext?.interests.join(", ") || "travel, music, food";
     const userCity = userContext?.location?.city || "Tashkent";
     const minAge = userContext?.settings?.minAge || 18;
@@ -43,12 +48,14 @@ export async function generateAIProfiles(count: number = 5, userContext?: UserAc
       }
     });
 
-    const profiles = JSON.parse(response.text || '[]');
+    // Access .text property directly
+    const data = JSON.parse(response.text || '{"profiles": []}');
+    const profiles = data.profiles || [];
     return profiles.map((p: any, index: number) => ({
       ...p,
       id: `ai-${Date.now()}-${index}`,
       type: 'ai',
-      lastSeen: Date.now() - Math.random() * 86400000, // so'nggi 24 soat ichida
+      lastSeen: Date.now() - Math.random() * 86400000, // within last 24 hours
       isVerified: Math.random() > 0.7,
       isPremium: Math.random() > 0.8,
       imageUrl: `https://picsum.photos/seed/${Math.random()}/600/800`
@@ -61,10 +68,12 @@ export async function generateAIProfiles(count: number = 5, userContext?: UserAc
 
 export async function getCityName(lat: number, lng: number): Promise<string> {
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `The user is at coordinates ${lat}, ${lng}. What is the most likely city or neighborhood name for this location? Return ONLY the name of the city/neighborhood.`,
     });
+    // Access .text property directly
     return response.text?.trim() || "Nearby";
   } catch (e) {
     return "Nearby";
@@ -73,6 +82,7 @@ export async function getCityName(lat: number, lng: number): Promise<string> {
 
 export async function getAIReply(userProfile: UserProfile, history: string[]): Promise<string> {
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const isFirstMessage = history.length === 0;
     const lastMessage = history[history.length - 1] || "";
     
@@ -94,6 +104,7 @@ export async function getAIReply(userProfile: UserProfile, history: string[]): P
       }
     });
 
+    // Access .text property directly
     return response.text?.trim() || "Hm...";
   } catch (error) {
     console.error("Error getting AI reply:", error);
@@ -103,10 +114,12 @@ export async function getAIReply(userProfile: UserProfile, history: string[]): P
 
 export async function generateSmartBio(name: string, age: number, interests: string[]): Promise<string> {
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Write a short, cool, human-like dating bio for ${name}, age ${age}, who likes ${interests.join(", ")}. Use emojis.`,
     });
+    // Access .text property directly
     return response.text || "";
   } catch (e) {
     return "Hayot go'zal! ✨";

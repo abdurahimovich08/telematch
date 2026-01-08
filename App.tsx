@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Flame, MessageCircle, User, Loader2, X, Heart, Star, Send, Sparkles, MapPin, RefreshCw, Settings, ShieldCheck, Zap, ArrowRight, CheckCircle2, BadgeCheck, Share2, DollarSign, MoreHorizontal, Camera, Bell } from 'lucide-react';
+import { Flame, MessageCircle, User, Loader2, X, Heart, Send, Sparkles, MapPin, RefreshCw, Settings, ArrowRight, BadgeCheck, Camera } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UserProfile, ViewState, Match, Message, UserAccount } from './types';
 import { generateAIProfiles, getAIReply, generateSmartBio, getCityName } from './geminiService';
@@ -21,7 +20,6 @@ const App: React.FC = () => {
   const STORAGE_KEY_MATCHES = tgUser ? `telematch_matches_${tgUser.id}` : 'telematch_matches_guest';
 
   const [view, setView] = useState<ViewState>('intro');
-  const [introStep, setIntroStep] = useState(0);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [matches, setMatches] = useState<Match[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_MATCHES);
@@ -30,25 +28,28 @@ const App: React.FC = () => {
   
   const [user, setUser] = useState<UserAccount>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_USER);
-    if (saved) return JSON.parse(saved);
+    const initialUser = saved ? JSON.parse(saved) : null;
     
+    // Telegram rasm manzili yoki fallback
+    const telegramPhoto = tgUser?.photo_url || `https://ui-avatars.com/api/?name=${tgUser?.first_name || 'User'}&background=random&size=512`;
+
     return {
       id: tgUser?.id?.toString() || 'guest',
-      name: tgUser?.first_name || '',
-      age: 21,
-      bio: '',
-      imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop',
-      coverImageUrl: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&auto=format&fit=crop',
-      interests: [],
+      name: tgUser?.first_name || (initialUser?.name || ''),
+      age: initialUser?.age || 21,
+      bio: initialUser?.bio || '',
+      imageUrl: telegramPhoto, // Har doim Telegram'dan olinadi
+      coverImageUrl: initialUser?.coverImageUrl || 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&auto=format&fit=crop',
+      interests: initialUser?.interests || [],
       isVerified: true,
       isPremium: tgUser?.is_premium || false,
-      settings: {
+      settings: initialUser?.settings || {
         minAge: 18,
         maxAge: 35,
         distanceLimit: 25,
         discoveryActive: true
       },
-      onboarded: false,
+      onboarded: initialUser?.onboarded || false,
       lastActive: Date.now()
     };
   });
@@ -61,8 +62,13 @@ const App: React.FC = () => {
   const [chatMessage, setChatMessage] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const avatarInputRef = useRef<HTMLInputElement>(null);
-  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync with Telegram photo on every load
+  useEffect(() => {
+    if (tgUser?.photo_url && tgUser.photo_url !== user.imageUrl) {
+      setUser(prev => ({ ...prev, imageUrl: tgUser.photo_url }));
+    }
+  }, [tgUser?.photo_url]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_MATCHES, JSON.stringify(matches));
@@ -142,18 +148,6 @@ const App: React.FC = () => {
     setIsLoading(false);
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setUser(prev => ({ ...prev, [type === 'avatar' ? 'imageUrl' : 'coverImageUrl']: result }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleGenerateBio = async () => {
     if (!user.name || user.interests.length === 0) return;
     setIsGeneratingBio(true);
@@ -178,19 +172,8 @@ const App: React.FC = () => {
     setTimeout(async () => {
       const firstReply = await getAIReply(profile, []);
       const aiMsg: Message = { id: Date.now().toString(), senderId: profile.id, text: firstReply, timestamp: Date.now() };
-      
-      setMatches(prev => {
-        const updated = prev.map(m => m.id === matchId ? { ...m, messages: [aiMsg], lastMessage: firstReply } : m);
-        return updated;
-      });
-      
-      // Update active match if we are currently looking at it
-      setActiveMatch(current => {
-        if (current?.id === matchId) {
-          return { ...current, messages: [aiMsg], lastMessage: firstReply };
-        }
-        return current;
-      });
+      setMatches(prev => prev.map(m => m.id === matchId ? { ...m, messages: [aiMsg], lastMessage: firstReply } : m));
+      setActiveMatch(current => current?.id === matchId ? { ...current, messages: [aiMsg], lastMessage: firstReply } : current);
     }, 2000);
   };
 
@@ -229,37 +212,18 @@ const App: React.FC = () => {
 
   const handleSendMessage = async () => {
     if (!chatMessage.trim() || !activeMatch) return;
-
     const userMsg: Message = { id: Date.now().toString(), senderId: 'user', text: chatMessage, timestamp: Date.now() };
     const currentMatchId = activeMatch.id;
-    
-    // Create the updated match object
-    const updatedMatch = { 
-      ...activeMatch, 
-      messages: [...activeMatch.messages, userMsg], 
-      lastMessage: chatMessage 
-    };
-
-    // Update global matches and active match
+    const updatedMatch = { ...activeMatch, messages: [...activeMatch.messages, userMsg], lastMessage: chatMessage };
     setMatches(prev => prev.map(m => m.id === currentMatchId ? updatedMatch : m));
     setActiveMatch(updatedMatch);
     setChatMessage('');
-
-    // If AI, trigger reply
     if (activeMatch.user.type === 'ai') {
       const history = updatedMatch.messages.map(m => `${m.senderId === 'user' ? 'User' : m.senderId}: ${m.text}`);
       const replyText = await getAIReply(activeMatch.user, history);
-      
       const aiMsg: Message = { id: (Date.now() + 1).toString(), senderId: activeMatch.user.id, text: replyText, timestamp: Date.now() };
-      
-      const finalMatch = { 
-        ...updatedMatch, 
-        messages: [...updatedMatch.messages, aiMsg], 
-        lastMessage: replyText 
-      };
-
+      const finalMatch = { ...updatedMatch, messages: [...updatedMatch.messages, aiMsg], lastMessage: replyText };
       setMatches(prev => prev.map(m => m.id === currentMatchId ? finalMatch : m));
-      // Faqatgina foydalanuvchi hali ham shu chatda bo'lsa yangilaymiz
       setActiveMatch(current => current?.id === currentMatchId ? finalMatch : current);
     }
   };
@@ -275,7 +239,7 @@ const App: React.FC = () => {
           <Flame size={48} fill="currentColor" />
         </div>
         <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">TeleMatch</h2>
-        <p className="text-gray-500 text-lg font-medium">Telegram ID orqali saqlanadigan aqlli tanishuv ilovasi.</p>
+        <p className="text-gray-500 text-lg font-medium">Profilingiz Telegram orqali avtomatik yaratiladi.</p>
       </div>
       <div className="p-10">
         <button onClick={() => setView('onboarding')} className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
@@ -288,35 +252,27 @@ const App: React.FC = () => {
   const renderOnboarding = () => (
     <div className="flex-1 flex flex-col p-6 bg-white overflow-y-auto">
       <div className="mt-4 mb-8 text-center">
-        <h1 className="text-3xl font-black text-gray-900 tracking-tight">Profilingiz</h1>
-        <p className="text-gray-500 mt-1 font-medium text-sm">Sizning Telegram ID'ingiz: {tgUser?.id || 'Guest'}</p>
+        <h1 className="text-3xl font-black text-gray-900 tracking-tight">Ma'lumotlaringiz</h1>
+        <div className="mt-2 flex items-center justify-center gap-2 text-blue-500 bg-blue-50 py-2 px-4 rounded-full inline-flex">
+          <BadgeCheck size={16} />
+          <span className="text-[10px] font-black uppercase tracking-wider text-blue-600">Telegram bilan sinxronlangan</span>
+        </div>
       </div>
       <div className="space-y-6 pb-10">
         <div className="flex flex-col items-center gap-4">
-            <input type="file" accept="image/*" ref={avatarInputRef} className="hidden" onChange={(e) => handleImageChange(e, 'avatar')} />
-            <input type="file" accept="image/*" ref={coverInputRef} className="hidden" onChange={(e) => handleImageChange(e, 'cover')} />
-            <div className="relative w-full h-40 rounded-3xl bg-gray-100 overflow-hidden border-2 border-dashed border-gray-200">
+            <div className="relative w-full h-40 rounded-3xl bg-gray-100 overflow-hidden border border-gray-100">
                 <img src={user.coverImageUrl} className="w-full h-full object-cover opacity-60" />
-                <div onClick={() => coverInputRef.current?.click()} className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 text-[10px] font-black uppercase tracking-widest cursor-pointer">
-                  <Camera size={24} className="mb-2" />
-                  Orqa fon
-                </div>
                 <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-28 h-28 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-white">
                     <img src={user.imageUrl} className="w-full h-full object-cover" />
-                    <div onClick={(e) => { e.stopPropagation(); avatarInputRef.current?.click(); }} className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-white cursor-pointer">
-                      <Camera size={20} />
-                    </div>
                 </div>
             </div>
-            <div className="mt-12 flex gap-4 text-xs font-bold text-blue-500">
-              <button onClick={() => avatarInputRef.current?.click()}>Avatar tahrirlash</button>
-              <span>|</span>
-              <button onClick={() => coverInputRef.current?.click()}>Fon tahrirlash</button>
+            <div className="mt-10 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">
+              Rasm va ismni o'zgartirish uchun Telegram profilingizni tahrirlang
             </div>
         </div>
         <div>
           <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">To'liq ism</label>
-          <input type="text" value={user.name} onChange={e => setUser(prev => ({ ...prev, name: e.target.value }))} className="w-full px-5 py-4 bg-gray-50 rounded-2xl text-gray-900 font-bold border border-gray-100 focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Ismingiz..." />
+          <input type="text" readOnly value={user.name} className="w-full px-5 py-4 bg-gray-100 rounded-2xl text-gray-400 font-bold border-none cursor-not-allowed" />
         </div>
         <div className="flex gap-4">
           <div className="w-24">
@@ -351,7 +307,7 @@ const App: React.FC = () => {
           <MapPin size={18} /> {user.location ? `Manzil: ${user.location.city}` : 'Joylashuvni aniqlash'}
         </button>
         <button onClick={() => { if (user.name && user.age >= 18) { setUser(prev => ({ ...prev, onboarded: true })); setView('discovery'); loadInitialProfiles(); } }} className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-2xl active:scale-95 transition-all mt-4">
-          Boshlash!
+          Tayyor!
         </button>
       </div>
     </div>
@@ -425,21 +381,56 @@ const App: React.FC = () => {
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-white" />
         </div>
         <div className="flex flex-col items-center -mt-16 relative z-10">
-          <div className="w-36 h-36 rounded-full border-[6px] border-white shadow-2xl overflow-hidden bg-white">
+          <div className="w-36 h-36 rounded-full border-[6px] border-white shadow-2xl overflow-hidden bg-white relative">
             <img src={user.imageUrl} className="w-full h-full object-cover" />
+            {user.isPremium && <div className="absolute bottom-1 right-1 bg-blue-500 p-1 rounded-full border-2 border-white"><BadgeCheck size={14} color="white" fill="currentColor" /></div>}
           </div>
-          <h1 className="mt-4 text-2xl font-black text-gray-900">{user.name}, {user.age}</h1>
-          <div className="flex items-center gap-1.5 mt-1 text-xs font-bold text-gray-400 uppercase tracking-widest">
-            <div className="w-2 h-2 bg-green-500 rounded-full" /> Online
+          <h1 className="mt-4 text-2xl font-black text-gray-900 flex items-center gap-2">
+            {user.name}, {user.age}
+          </h1>
+          <div className="flex items-center gap-1.5 mt-1 text-[10px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">
+            <RefreshCw size={10} className="animate-spin-slow" /> Synced with Telegram
           </div>
         </div>
       </div>
+
+      {/* Storylar Bo'limi (Telegram Style) */}
+      <div className="px-6 mt-8">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hikoyalar (Stories)</h3>
+          <span className="text-[10px] font-bold text-blue-500">Telegram'dan sinxronlangan</span>
+        </div>
+        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex-shrink-0 w-20 h-28 rounded-2xl bg-gray-100 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400">
+            <Camera size={20} />
+            <span className="text-[8px] font-bold mt-2 uppercase">Yangi</span>
+          </div>
+          {[1, 2, 3].map(i => (
+            <div key={i} className="flex-shrink-0 w-20 h-28 rounded-2xl bg-gray-100 overflow-hidden border-2 border-blue-500 p-0.5">
+               <img src={`https://picsum.photos/seed/story${i+user.id}/200/300`} className="w-full h-full rounded-xl object-cover grayscale-[0.5]" />
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="px-10 mt-6 text-center text-sm text-gray-500 leading-relaxed italic">
         "{user.bio || "Salom! Men yangi insonlar bilan tanishishga tayyorman."}"
       </div>
-      <div className="px-6 mt-10 space-y-4">
+
+      <div className="px-6 mt-8 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="p-4 bg-gray-50 rounded-3xl border border-gray-100 text-center">
+            <div className="text-xl font-black text-gray-900">{matches.length}</div>
+            <div className="text-[10px] font-black text-gray-400 uppercase">Matchlar</div>
+          </div>
+          <div className="p-4 bg-gray-50 rounded-3xl border border-gray-100 text-center">
+            <div className="text-xl font-black text-gray-900">{(profiles.length * 1.5).toFixed(0)}</div>
+            <div className="text-[10px] font-black text-gray-400 uppercase">Ko'rilgan</div>
+          </div>
+        </div>
+        
         <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 font-bold text-gray-900 text-sm active:scale-95 transition-all">
-            Profilni tahrirlash <ArrowRight size={16} />
+            Profilni tahrirlash (Yosh/Bio) <ArrowRight size={16} />
         </button>
         <button onClick={() => setShowSettings(!showSettings)} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 font-bold text-gray-900 text-sm active:scale-95 transition-all">
             Qidiruv filtrlari <Settings size={16} />
@@ -450,6 +441,15 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-white">
+      <style>{`
+        .animate-spin-slow {
+          animation: spin 3s linear infinite;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
       <AnimatePresence>
         {matchNotification && (
           <motion.div initial={{ y: -100 }} animate={{ y: 0 }} exit={{ y: -100 }} onClick={() => { 
@@ -515,13 +515,11 @@ const App: React.FC = () => {
             userImageUrl={user.imageUrl} 
             onClose={() => setShowMatchSplash(null)} 
             onChat={() => { 
-              // Fix: Find the newly created match and set it as active
               const currentMatch = matches.find(m => m.user.id === showMatchSplash.id);
               if (currentMatch) {
                 setActiveMatch(currentMatch);
                 setView('chat');
               } else {
-                // If not found yet (state update race condition), we can fallback to matches view
                 setView('matches');
               }
               setShowMatchSplash(null); 
