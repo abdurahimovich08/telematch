@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Flame, MessageCircle, User, Loader2, X, Heart, Star, Send, Sparkles, MapPin, RefreshCw, Settings, ShieldCheck, Zap, ArrowRight, CheckCircle2, BadgeCheck, Share2, DollarSign, MoreHorizontal } from 'lucide-react';
+import { Flame, MessageCircle, User, Loader2, X, Heart, Star, Send, Sparkles, MapPin, RefreshCw, Settings, ShieldCheck, Zap, ArrowRight, CheckCircle2, BadgeCheck, Share2, DollarSign, MoreHorizontal, Camera } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UserProfile, ViewState, Match, Message, UserAccount } from './types';
 import { generateAIProfiles, getAIReply, generateSmartBio, getCityName } from './geminiService';
@@ -54,6 +54,9 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [bioExpanded, setBioExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     localStorage.setItem('telematch_matches', JSON.stringify(matches));
@@ -115,6 +118,22 @@ const App: React.FC = () => {
     const bio = await generateSmartBio(user.name, user.age, user.interests);
     setUser(prev => ({ ...prev, bio }));
     setIsGeneratingBio(false);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        if (type === 'avatar') {
+          setUser(prev => ({ ...prev, imageUrl: base64String }));
+        } else {
+          setUser(prev => ({ ...prev, coverImageUrl: base64String }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSwipe = useCallback(async (direction: 'left' | 'right') => {
@@ -259,14 +278,57 @@ const App: React.FC = () => {
       <div className="space-y-6 pb-10">
         <div className="flex flex-col items-center gap-4">
             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avatar & Cover</div>
+            
+            {/* Hidden Inputs */}
+            <input 
+              type="file" 
+              accept="image/*" 
+              ref={avatarInputRef} 
+              className="hidden" 
+              onChange={(e) => handleImageChange(e, 'avatar')} 
+            />
+            <input 
+              type="file" 
+              accept="image/*" 
+              ref={coverInputRef} 
+              className="hidden" 
+              onChange={(e) => handleImageChange(e, 'cover')} 
+            />
+
             <div className="relative w-full h-40 rounded-3xl bg-gray-100 overflow-hidden border-2 border-dashed border-gray-200 group">
                 <img src={user.coverImageUrl} className="w-full h-full object-cover opacity-60" />
-                <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-[10px] font-black uppercase tracking-widest">Orqa fon rasmi</div>
+                <div 
+                  onClick={() => coverInputRef.current?.click()}
+                  className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 text-[10px] font-black uppercase tracking-widest cursor-pointer bg-black/5 hover:bg-black/10 transition-colors"
+                >
+                  <Camera size={24} className="mb-2" />
+                  Orqa fonni tanlash
+                </div>
                 <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-28 h-28 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-white">
                     <img src={user.imageUrl} className="w-full h-full object-cover" />
+                    <div 
+                      onClick={(e) => { e.stopPropagation(); avatarInputRef.current?.click(); }}
+                      className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-white cursor-pointer"
+                    >
+                      <Camera size={20} />
+                    </div>
                 </div>
             </div>
-            <div className="mt-12 text-xs font-bold text-blue-500 cursor-pointer">Rasmlarni o'zgartirish</div>
+            <div className="mt-12 flex gap-4">
+              <button 
+                onClick={() => avatarInputRef.current?.click()}
+                className="text-xs font-bold text-blue-500 cursor-pointer flex items-center gap-1"
+              >
+                Avatar
+              </button>
+              <span className="text-gray-300">|</span>
+              <button 
+                onClick={() => coverInputRef.current?.click()}
+                className="text-xs font-bold text-blue-500 cursor-pointer flex items-center gap-1"
+              >
+                Cover
+              </button>
+            </div>
         </div>
 
         <div>
@@ -453,7 +515,7 @@ const App: React.FC = () => {
                 <button onClick={() => setView('discovery')} className="p-2.5 bg-white/20 backdrop-blur-xl rounded-full text-white shadow-xl hover:bg-white/40 transition-all">
                     <ArrowRight className="rotate-180" size={18} />
                 </button>
-                <div className="text-white font-black text-sm tracking-widest drop-shadow-md">kristin_watson</div>
+                <div className="text-white font-black text-sm tracking-widest drop-shadow-md">{user.name.toLowerCase().replace(/\s+/g, '_')}</div>
             </div>
 
             <button className="absolute top-6 right-6 p-2.5 bg-white/20 backdrop-blur-xl rounded-full text-white shadow-xl">
@@ -481,7 +543,7 @@ const App: React.FC = () => {
       
       <div className="px-10 mt-6 text-center">
         <p className={`text-sm font-medium text-gray-500 leading-relaxed ${bioExpanded ? '' : 'line-clamp-2'}`}>
-          {user.bio || "I'm a generous and lively girl, hope my enthusiasm can add more color to your life..."}
+          {user.bio || "Salom! Men yangi insonlar bilan tanishishni yaxshi ko'raman."}
         </p>
         <button onClick={() => setBioExpanded(!bioExpanded)} className="mt-1 text-blue-600 font-black text-xs uppercase tracking-tighter">
             {bioExpanded ? "Less" : "More"}
@@ -489,7 +551,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="px-6 mt-8 flex items-center gap-3">
-        <button className="flex-1 py-4 bg-gray-50 rounded-2xl font-black text-gray-900 text-sm tracking-tight shadow-sm active:scale-95 transition-all">
+        <button onClick={() => setView('matches')} className="flex-1 py-4 bg-gray-50 rounded-2xl font-black text-gray-900 text-sm tracking-tight shadow-sm active:scale-95 transition-all">
             Message
         </button>
         <button className="w-14 h-14 bg-white border border-gray-100 rounded-full flex items-center justify-center text-gray-900 shadow-sm active:scale-90 transition-all">
