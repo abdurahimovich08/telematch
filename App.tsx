@@ -17,7 +17,6 @@ const App: React.FC = () => {
   const tg = window.Telegram?.WebApp;
   const tgUser = tg?.initDataUnsafe?.user;
   
-  // Telegram User ID orqali Storage key yaratish
   const STORAGE_KEY_USER = tgUser ? `telematch_user_${tgUser.id}` : 'telematch_user_guest';
   const STORAGE_KEY_MATCHES = tgUser ? `telematch_matches_${tgUser.id}` : 'telematch_matches_guest';
 
@@ -61,9 +60,7 @@ const App: React.FC = () => {
   const [matchNotification, setMatchNotification] = useState<UserProfile | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const [showSettings, setShowSettings] = useState(false);
-  const [bioExpanded, setBioExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,52 +78,68 @@ const App: React.FC = () => {
       tg.expand();
       document.body.style.backgroundColor = tg.backgroundColor || '#ffffff';
     }
-
     if (user.onboarded) {
       setView('discovery');
       loadInitialProfiles();
     }
   }, []);
 
-  // SARALASH ALGORITMI (Recommendation Engine)
   const scoreProfile = useCallback((profile: UserProfile): number => {
     let score = 0;
-
-    // 1. Ustuvorlik: Real foydalanuvchilar har doim tepada
     if (profile.type === 'real') score += 5000;
-
-    // 2. Masofa: Yaqinroq bo'lsa shuncha yaxshi
-    if (profile.distanceKm !== undefined) {
-      score += Math.max(0, 1000 - profile.distanceKm * 20);
-    }
-
-    // 3. Qiziqishlar: O'xshash qiziqishlar soni
+    if (profile.distanceKm !== undefined) score += Math.max(0, 1000 - profile.distanceKm * 20);
     const sharedInterests = profile.interests.filter(i => user.interests.includes(i));
     score += sharedInterests.length * 200;
-
-    // 4. Faollik: Yaqinda kirganlar
     const hoursSinceActive = (Date.now() - profile.lastSeen) / (1000 * 60 * 60);
     if (hoursSinceActive < 24) score += 300;
-
-    // 5. Account holati
     if (profile.isVerified) score += 150;
     if (profile.isPremium) score += 200;
-
-    // 6. Yosh filtri (Bonus ball)
-    if (profile.age >= user.settings.minAge && profile.age <= user.settings.maxAge) {
-      score += 400;
-    }
-
+    if (profile.age >= user.settings.minAge && profile.age <= user.settings.maxAge) score += 400;
     return score;
   }, [user]);
 
   const loadInitialProfiles = async () => {
     setIsLoading(true);
-    // Real ilovada bu yerda API orqali bazadan profillar olinadi
-    const rawProfiles = await generateAIProfiles(12, user);
     
-    // Profillarni ballari bo'yicha saralash
-    const scoredProfiles = rawProfiles
+    // 1. AI profillarini yaratish
+    const aiProfiles = await generateAIProfiles(8, user);
+    
+    // 2. REAL foydalanuvchilar simulyatsiyasi (Bazada bor deb tasavvur qilamiz)
+    const simulatedRealProfiles: UserProfile[] = [
+      {
+        id: 'real-1',
+        name: 'Malika',
+        age: 22,
+        bio: 'Sanʼat va kitoblarni yaxshi koʻraman 🎨',
+        imageUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop',
+        interests: ['Art', 'Books', 'Music'],
+        location: user.location?.city || 'Tashkent',
+        distance: '2 km away',
+        distanceKm: 2,
+        type: 'real',
+        isVerified: true,
+        lastSeen: Date.now() - 5000,
+      },
+      {
+        id: 'real-2',
+        name: 'Jasur',
+        age: 25,
+        bio: 'Futbol va sayohat — mening hayotim ⚽️✈️',
+        imageUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop',
+        interests: ['Football', 'Travel', 'Tech'],
+        location: user.location?.city || 'Tashkent',
+        distance: '5 km away',
+        distanceKm: 5,
+        type: 'real',
+        isPremium: true,
+        lastSeen: Date.now() - 120000,
+      }
+    ];
+
+    const allProfiles = [...aiProfiles, ...simulatedRealProfiles];
+    
+    // Saralash
+    const scoredProfiles = allProfiles
       .map(p => ({ ...p, score: scoreProfile(p) }))
       .sort((a, b) => (b.score || 0) - (a.score || 0));
 
@@ -140,10 +153,7 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        setUser(prev => ({
-          ...prev,
-          [type === 'avatar' ? 'imageUrl' : 'coverImageUrl']: result
-        }));
+        setUser(prev => ({ ...prev, [type === 'avatar' ? 'imageUrl' : 'coverImageUrl']: result }));
       };
       reader.readAsDataURL(file);
     }
@@ -175,7 +185,7 @@ const App: React.FC = () => {
       const aiMsg: Message = { id: Date.now().toString(), senderId: profile.id, text: firstReply, timestamp: Date.now() };
       setMatches(prev => prev.map(m => m.id === matchId ? { ...m, messages: [aiMsg], lastMessage: firstReply } : m));
       setActiveMatch(current => current?.id === matchId ? { ...current, messages: [aiMsg], lastMessage: firstReply } : current);
-    }, 2500);
+    }, 2000);
   };
 
   const handleSwipe = useCallback(async (direction: 'left' | 'right') => {
@@ -186,14 +196,9 @@ const App: React.FC = () => {
       tg.HapticFeedback.impactOccurred(direction === 'right' ? 'medium' : 'light');
     }
 
-    if (direction === 'right' && Math.random() > 0.6) {
+    if (direction === 'right' && (swipedProfile.type === 'ai' || Math.random() > 0.5)) {
       const matchId = `match-${Date.now()}`;
-      const newMatch: Match = {
-        id: matchId,
-        user: swipedProfile,
-        timestamp: Date.now(),
-        messages: []
-      };
+      const newMatch: Match = { id: matchId, user: swipedProfile, timestamp: Date.now(), messages: [] };
       setMatches(prev => [newMatch, ...prev]);
       
       if (view === 'discovery') {
@@ -210,7 +215,7 @@ const App: React.FC = () => {
 
     setProfiles(prev => prev.slice(1));
     if (profiles.length < 4) {
-      const more = await generateAIProfiles(8, user);
+      const more = await generateAIProfiles(5, user);
       const scoredMore = more.map(p => ({ ...p, score: scoreProfile(p) }));
       setProfiles(prev => [...prev, ...scoredMore].sort((a, b) => (b.score || 0) - (a.score || 0)));
     }
@@ -237,79 +242,39 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [activeMatch?.messages]);
 
-  const renderIntro = () => {
-    const slides = [
-      {
-        icon: <div className="w-24 h-24 bg-blue-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-blue-200"><Flame size={48} fill="currentColor" /></div>,
-        title: "Xush kelibsiz!",
-        desc: "TeleMatch - Telegram ichidagi eng aqlli tanishuv platformasi."
-      },
-      {
-        icon: <div className="w-24 h-24 bg-pink-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-pink-200"><Sparkles size={48} /></div>,
-        title: "Smart Matching",
-        desc: "AI sizning qiziqishlaringiz va joylashuvingiz bo'yicha eng yaxshilarni saralaydi."
-      },
-      {
-        icon: <div className="w-24 h-24 bg-green-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-green-200"><ShieldCheck size={48} /></div>,
-        title: "Real User Priority",
-        desc: "Biz haqiqiy foydalanuvchilarni tavsiyalarning eng yuqorisida ko'rsatamiz."
-      }
-    ];
-
-    const nextSlide = () => {
-      if (introStep < slides.length - 1) setIntroStep(prev => prev + 1);
-      else setView('onboarding');
-    };
-
-    return (
-      <div className="flex-1 flex flex-col bg-white overflow-hidden">
-        <div className="flex-1 relative">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={introStep}
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
-              className="absolute inset-0 flex flex-col items-center justify-center p-10 text-center"
-            >
-              <div className="mb-8">{slides[introStep].icon}</div>
-              <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">{slides[introStep].title}</h2>
-              <p className="text-gray-500 text-lg font-medium leading-relaxed">{slides[introStep].desc}</p>
-            </motion.div>
-          </AnimatePresence>
+  const renderIntro = () => (
+    <div className="flex-1 flex flex-col bg-white overflow-hidden">
+      <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
+        <div className="w-24 h-24 bg-blue-500 rounded-3xl flex items-center justify-center text-white shadow-2xl mb-8">
+          <Flame size={48} fill="currentColor" />
         </div>
-        <div className="p-10 flex flex-col items-center gap-8">
-          <div className="flex gap-2">
-            {slides.map((_, i) => (
-              <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === introStep ? 'w-8 bg-blue-500' : 'w-2 bg-gray-200'}`}/>
-            ))}
-          </div>
-          <button onClick={nextSlide} className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-            Keyingisi <ArrowRight size={20} />
-          </button>
-        </div>
+        <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">TeleMatch</h2>
+        <p className="text-gray-500 text-lg font-medium">Telegram ID orqali saqlanadigan aqlli tanishuv ilovasi.</p>
       </div>
-    );
-  };
+      <div className="p-10">
+        <button onClick={() => setView('onboarding')} className="w-full py-5 bg-gray-900 text-white rounded-3xl font-black text-lg shadow-xl flex items-center justify-center gap-3">
+          Boshlash <ArrowRight size={20} />
+        </button>
+      </div>
+    </div>
+  );
 
   const renderOnboarding = () => (
     <div className="flex-1 flex flex-col p-6 bg-white overflow-y-auto">
       <div className="mt-4 mb-8 text-center">
-        <h1 className="text-3xl font-black text-gray-900 tracking-tight">Profilingizni yarating</h1>
-        <p className="text-gray-500 mt-1 font-medium text-sm">Sizning Telegram ID'ingiz orqali profilingiz saqlanadi</p>
+        <h1 className="text-3xl font-black text-gray-900 tracking-tight">Profilingiz</h1>
+        <p className="text-gray-500 mt-1 font-medium text-sm">Sizning Telegram ID'ingiz: {tgUser?.id || 'Guest'}</p>
       </div>
       <div className="space-y-6 pb-10">
         <div className="flex flex-col items-center gap-4">
             <input type="file" accept="image/*" ref={avatarInputRef} className="hidden" onChange={(e) => handleImageChange(e, 'avatar')} />
             <input type="file" accept="image/*" ref={coverInputRef} className="hidden" onChange={(e) => handleImageChange(e, 'cover')} />
-            <div className="relative w-full h-40 rounded-3xl bg-gray-100 overflow-hidden border-2 border-dashed border-gray-200 group">
+            <div className="relative w-full h-40 rounded-3xl bg-gray-100 overflow-hidden border-2 border-dashed border-gray-200">
                 <img src={user.coverImageUrl} className="w-full h-full object-cover opacity-60" />
-                <div onClick={() => coverInputRef.current?.click()} className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 text-[10px] font-black uppercase tracking-widest cursor-pointer bg-black/5 hover:bg-black/10 transition-colors">
+                <div onClick={() => coverInputRef.current?.click()} className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 text-[10px] font-black uppercase tracking-widest cursor-pointer">
                   <Camera size={24} className="mb-2" />
                   Orqa fon
                 </div>
@@ -400,6 +365,7 @@ const App: React.FC = () => {
           <div key={match.id} onClick={() => { setActiveMatch(match); setView('chat'); }} className="flex-shrink-0 flex flex-col items-center">
             <div className="w-24 h-32 rounded-2xl p-1 border-2 border-pink-500 shadow-lg relative">
               <img src={match.user.imageUrl} className="w-full h-full rounded-xl object-cover" />
+              {match.user.type === 'real' && <div className="absolute top-1 right-1 bg-green-500 w-3 h-3 rounded-full border-2 border-white"></div>}
             </div>
             <span className="text-[10px] font-black mt-2 text-gray-900 uppercase">{match.user.name}</span>
           </div>
@@ -412,7 +378,10 @@ const App: React.FC = () => {
             <img src={match.user.imageUrl} className="w-16 h-16 rounded-3xl object-cover shadow-md" />
             <div className="flex-1">
               <div className="flex justify-between items-center">
-                <span className="font-black text-gray-900">{match.user.name}</span>
+                <span className="font-black text-gray-900 flex items-center gap-1">
+                  {match.user.name} 
+                  {match.user.isVerified && <BadgeCheck size={14} className="text-blue-500 fill-blue-500" color="white" />}
+                </span>
                 <span className="text-[10px] font-black text-gray-400">{new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
               <p className="text-sm text-gray-500 line-clamp-1 font-bold">{match.lastMessage || `👋 Suhbatni boshlang!`}</p>
@@ -444,13 +413,11 @@ const App: React.FC = () => {
         "{user.bio || "Salom! Men yangi insonlar bilan tanishishga tayyorman."}"
       </div>
       <div className="px-6 mt-10 space-y-4">
-        <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6">
-            <span className="font-bold text-gray-900 text-sm">Profilni tahrirlash</span>
-            <ArrowRight size={16} />
+        <button onClick={() => setView('onboarding')} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 font-bold text-gray-900 text-sm">
+            Profilni tahrirlash <ArrowRight size={16} />
         </button>
-        <button onClick={() => setShowSettings(!showSettings)} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6">
-            <span className="font-bold text-gray-900 text-sm">Filtrlar (Qidiruv)</span>
-            <Settings size={16} />
+        <button onClick={() => setShowSettings(!showSettings)} className="w-full py-4 bg-white border-2 border-gray-100 rounded-2xl flex items-center justify-between px-6 font-bold text-gray-900 text-sm">
+            Qidiruv filtrlari <Settings size={16} />
         </button>
       </div>
     </div>
