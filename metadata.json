@@ -1,0 +1,8 @@
+{
+  "name": "Copy of TeleMatch - AI Dating Mini App",
+  "description": "A high-fidelity Tinder clone designed for Telegram, featuring AI-generated profiles and smart matching using the Gemini API.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
